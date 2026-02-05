@@ -22,7 +22,7 @@ Desarrollado por David Chimbaco
 
 ### 1. Clonar el repositorio
 ```bash
-git clone <url-del-repositorio>
+git clone https://github.com/JuanDavidChimbaco/golos-inventory.git
 cd golos-inventory
 ```
 
