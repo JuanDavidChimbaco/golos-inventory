@@ -1,0 +1,7 @@
+# Base requirements from requirements.txt
+-r requirements.txt
+
+# Production-specific dependencies
+gunicorn==21.2.0
+psycopg2-binary==2.9.9
+dj-database-url==2.1.0
