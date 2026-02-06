@@ -36,6 +36,11 @@ class ProductImage(models.Model):
     Attributes:
         product (ForeignKey): Producto al que pertenece la imagen
         image (ImageField): Imagen del producto
+        is_primary (BooleanField): Si es la imagen principal del producto
+        alt_text (CharField): Texto alternativo para accesibilidad y SEO
+        file_size (IntegerField): Tamaño del archivo en bytes (autocompletado)
+        width (IntegerField): Ancho de la imagen en píxeles (autocompletado)
+        height (IntegerField): Alto de la imagen en píxeles (autocompletado)
         created_at (DateTimeField): Fecha de creación
         updated_at (DateTimeField): Fecha de actualización
         created_by (CharField): Usuario que creó la imagen
@@ -46,6 +51,28 @@ class ProductImage(models.Model):
         Product, on_delete=models.PROTECT, related_name="images"
     )
     image = models.ImageField(upload_to="products/")
+    is_primary = models.BooleanField(
+        default=False,
+        help_text="Marcar como imagen principal del producto"
+    )
+    alt_text = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Texto alternativo para SEO y accesibilidad"
+    )
+    # Campos autocompletados por el servicio
+    file_size = models.IntegerField(
+        null=True, blank=True, editable=False,
+        help_text="Tamaño del archivo en bytes (autocompletado)"
+    )
+    width = models.IntegerField(
+        null=True, blank=True, editable=False,
+        help_text="Ancho en píxeles (autocompletado)"
+    )
+    height = models.IntegerField(
+        null=True, blank=True, editable=False,
+        help_text="Alto en píxeles (autocompletado)"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.CharField(max_length=50)  # mientras se usa user
