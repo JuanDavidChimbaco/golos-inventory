@@ -80,10 +80,76 @@ class ProductVariantSerializer(BaseModelSerializer):
 
 
 class ProductImageSerializer(BaseModelSerializer):
+    """
+    Serializer para imágenes de productos con validación y procesamiento
+    """
+    
+    def validate_image(self, value):
+        """
+        Valida el archivo de imagen usando el servicio
+        
+        Args:
+            value: Archivo de imagen subido
+            
+        Returns:
+            File: Archivo validado
+            
+        Raises:
+            ValidationError: Si la imagen no es válida
+        """
+        # Usar el servicio para validar
+        from .services import ImageService
+        ImageService.validate_image_file(value)
+        return value
+    
+    def create(self, validated_data):
+        """
+        Crea una nueva imagen de producto con procesamiento automático
+        """
+        # Obtener usuario del contexto
+        user = self.context["request"].user
+        validated_data["created_by"] = user.username
+        validated_data["updated_by"] = user.username
+        
+        # Crear instancia sin guardar aún
+        product_image = ProductImage(**validated_data)
+        
+        # Procesar imagen usando el servicio
+        from .services import ImageService
+        processed_image = ImageService.process_product_image(product_image)
+        
+        # Guardar la imagen procesada
+        processed_image.save()
+        
+        return processed_image
+    
+    def update(self, instance, validated_data):
+        """
+        Actualiza una imagen existente
+        """
+        user = self.context["request"].user
+        validated_data["updated_by"] = user.username
+        
+        # Si se sube una nueva imagen, procesarla
+        if "image" in validated_data:
+            from .services import ImageService
+            instance.image = validated_data["image"]
+            ImageService.process_product_image(instance)
+            del validated_data["image"]  # Eliminar para evitar duplicado
+        
+        return super().update(instance, validated_data)
+    
     class Meta:
         model = ProductImage
-        fields = "__all__"
-        read_only_fields = ("created_at", "updated_at", "created_by", "updated_by")
+        fields = [
+            "id", "product", "image", "is_primary", "alt_text",
+            "file_size", "width", "height",
+            "created_at", "updated_at", "created_by", "updated_by"
+        ]
+        read_only_fields = [
+            "file_size", "width", "height",  # Campos autocompletados
+            "created_at", "updated_at", "created_by", "updated_by"
+        ]
 
 
 class ProductSerializer(BaseModelSerializer):

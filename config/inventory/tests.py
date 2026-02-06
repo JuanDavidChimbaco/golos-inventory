@@ -2,9 +2,12 @@ from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.core.files.uploadedfile import SimpleUploadedFile
 from decimal import Decimal
-from .models import Product, ProductVariant, MovementInventory, Sale, SaleDetail
-from .services import confirm_sale
+from PIL import Image
+from io import BytesIO
+from .models import Product, ProductVariant, MovementInventory, Sale, SaleDetail, ProductImage
+from .services import confirm_sale, ImageService
 
 
 class ConfirmSaleServiceTest(TestCase):
@@ -226,3 +229,287 @@ class ProductVariantModelTest(TestCase):
                 cost=Decimal("18.00"),
                 created_by="testuser",
             )
+
+
+class ImageServiceTest(TestCase):
+    """Tests para el servicio de imágenes"""
+    
+    def setUp(self):
+        self.product = Product.objects.create(
+            name="Producto Test", brand="Test", created_by="testuser"
+        )
+    
+    def create_test_image(self, size=(100, 100), format='JPEG', name='test.jpg'):
+        """Crea una imagen de prueba"""
+        img = Image.new('RGB', size, color='red')
+        img_io = BytesIO()
+        img.save(img_io, format=format)
+        img_io.seek(0)
+        return SimpleUploadedFile(name, img_io.getvalue(), content_type=f'image/{format.lower()}')
+    
+    def test_validate_image_file_success(self):
+        """Test validación exitosa de imagen válida"""
+        image = self.create_test_image()
+        
+        # No debe lanzar excepción
+        try:
+            ImageService.validate_image_file(image)
+        except ValidationError:
+            self.fail("validate_image_file() lanzó ValidationError inesperadamente")
+    
+    def test_validate_image_file_too_large(self):
+        """Test validación falla por tamaño excesivo"""
+        # Crear imagen grande (simulando 3MB)
+        large_image = SimpleUploadedFile(
+            "large.jpg", 
+            b'x' * (3 * 1024 * 1024),  # 3MB
+            content_type="image/jpeg"
+        )
+        
+        with self.assertRaises(ValidationError) as context:
+            ImageService.validate_image_file(large_image)
+        
+        self.assertIn("demasiado grande", str(context.exception))
+    
+    def test_validate_image_file_invalid_format(self):
+        """Test validación falla por formato inválido"""
+        # Crear archivo que no es imagen
+        invalid_file = SimpleUploadedFile(
+            "test.txt", 
+            b"esto no es una imagen",
+            content_type="text/plain"
+        )
+        
+        with self.assertRaises(ValidationError) as context:
+            ImageService.validate_image_file(invalid_file)
+        
+        self.assertIn("no es una imagen válida", str(context.exception))
+    
+    def test_extract_image_metadata_success(self):
+        """Test extracción correcta de metadatos"""
+        image = self.create_test_image(size=(200, 150))
+        metadata = ImageService.extract_image_metadata(image)
+        
+        self.assertEqual(metadata['width'], 200)
+        self.assertEqual(metadata['height'], 150)
+        self.assertEqual(metadata['format'], 'JPEG')
+        self.assertGreater(metadata['file_size'], 0)
+    
+    def test_extract_image_metadata_invalid_file(self):
+        """Test extracción con archivo inválido"""
+        invalid_file = SimpleUploadedFile(
+            "invalid.txt", 
+            b"no es imagen",
+            content_type="text/plain"
+        )
+        metadata = ImageService.extract_image_metadata(invalid_file)
+        
+        self.assertEqual(metadata['width'], 0)
+        self.assertEqual(metadata['height'], 0)
+        self.assertEqual(metadata['format'], 'Unknown')
+        self.assertGreater(metadata['file_size'], 0)
+    
+    def test_process_product_image_success(self):
+        """Test procesamiento completo de imagen"""
+        image = self.create_test_image(size=(300, 200))
+        
+        # Crear instancia sin guardar
+        product_image = ProductImage(
+            product=self.product,
+            image=image,
+            is_primary=True,
+            alt_text="Imagen de prueba"
+        )
+        
+        # Procesar
+        processed = ImageService.process_product_image(product_image)
+        
+        # Verificar metadatos
+        self.assertEqual(processed.width, 300)
+        self.assertEqual(processed.height, 200)
+        self.assertGreater(processed.file_size, 0)
+        self.assertEqual(processed.product, self.product)
+        self.assertTrue(processed.is_primary)
+        self.assertEqual(processed.alt_text, "Imagen de prueba")
+    
+    def test_set_primary_image(self):
+        """Test establecer imagen principal"""
+        # Crear múltiples imágenes
+        image1 = self.create_test_image()
+        image2 = self.create_test_image()
+        
+        product_image1 = ProductImage.objects.create(
+            product=self.product,
+            image=image1,
+            is_primary=False,
+            created_by="testuser"
+        )
+        product_image2 = ProductImage.objects.create(
+            product=self.product,
+            image=image2,
+            is_primary=False,
+            created_by="testuser"
+        )
+        
+        # Establecer segunda como principal
+        ImageService.set_primary_image(self.product, product_image2.id)
+        
+        # Verificar que solo la segunda es principal
+        product_image1.refresh_from_db()
+        product_image2.refresh_from_db()
+        
+        self.assertFalse(product_image1.is_primary)
+        self.assertTrue(product_image2.is_primary)
+
+
+class ProductImageSerializerTest(TestCase):
+    """Tests para el serializer de imágenes"""
+    
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="testuser", email="test@example.com", password="testpass123"
+        )
+        self.product = Product.objects.create(
+            name="Producto Test", brand="Test", created_by="testuser"
+        )
+    
+    def create_test_image(self, size=(100, 100), format='JPEG', name='test.jpg'):
+        """Crea una imagen de prueba"""
+        img = Image.new('RGB', size, color='blue')
+        img_io = BytesIO()
+        img.save(img_io, format=format)
+        img_io.seek(0)
+        return SimpleUploadedFile(name, img_io.getvalue(), content_type=f'image/{format.lower()}')
+    
+    def test_serializer_create_success(self):
+        """Test creación exitosa vía serializer"""
+        from .serializers import ProductImageSerializer
+        
+        image = self.create_test_image()
+        data = {
+            'product': self.product.id,
+            'image': image,
+            'is_primary': True,
+            'alt_text': 'Imagen principal'
+        }
+        
+        serializer = ProductImageSerializer(
+            data=data,
+            context={'request': type('Request', (), {'user': self.user})()}
+        )
+        
+        self.assertTrue(serializer.is_valid())
+        product_image = serializer.save()
+        
+        # Verificar que se guardó correctamente
+        self.assertEqual(product_image.product, self.product)
+        self.assertTrue(product_image.is_primary)
+        self.assertEqual(product_image.alt_text, 'Imagen principal')
+        self.assertEqual(product_image.created_by, 'testuser')
+        
+        # Verificar metadatos autocompletados
+        self.assertIsNotNone(product_image.width)
+        self.assertIsNotNone(product_image.height)
+        self.assertIsNotNone(product_image.file_size)
+    
+    def test_serializer_validate_image_too_large(self):
+        """Test validación de imagen muy grande"""
+        from .serializers import ProductImageSerializer
+        
+        # Crear imagen grande pero válida para DRF
+        img = Image.new('RGB', (100, 100), color='red')
+        img_io = BytesIO()
+        img.save(img_io, format='JPEG')
+        img_io.seek(0)
+        
+        # Modificar el tamaño del archivo para simular 3MB
+        large_content = img_io.getvalue() + (b'x' * (3 * 1024 * 1024 - len(img_io.getvalue())))
+        large_image = SimpleUploadedFile(
+            "large.jpg", 
+            large_content,
+            content_type="image/jpeg"
+        )
+        
+        data = {
+            'product': self.product.id,
+            'image': large_image,
+            'is_primary': False,
+            'alt_text': ''
+        }
+        
+        serializer = ProductImageSerializer(
+            data=data,
+            context={'request': type('Request', (), {'user': self.user})()}
+        )
+        
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('image', serializer.errors)
+        # Puede ser nuestro mensaje o el de DRF
+        error_message = str(serializer.errors['image'])
+        self.assertTrue(
+            'demasiado grande' in error_message or 'invalid' in error_message
+        )
+    
+    def test_serializer_update_with_new_image(self):
+        """Test actualización con nueva imagen"""
+        from .serializers import ProductImageSerializer
+        
+        # Crear imagen inicial
+        initial_image = self.create_test_image(size=(100, 100))
+        product_image = ProductImage.objects.create(
+            product=self.product,
+            image=initial_image,
+            is_primary=False,
+            created_by="testuser"
+        )
+        
+        # Crear nueva imagen
+        new_image = self.create_test_image(size=(200, 200))
+        data = {
+            'image': new_image,
+            'alt_text': 'Imagen actualizada'
+        }
+        
+        serializer = ProductImageSerializer(
+            instance=product_image,
+            data=data,
+            partial=True,
+            context={'request': type('Request', (), {'user': self.user})()}
+        )
+        
+        self.assertTrue(serializer.is_valid())
+        updated_image = serializer.save()
+        
+        # Verificar actualización
+        self.assertEqual(updated_image.alt_text, 'Imagen actualizada')
+        self.assertEqual(updated_image.updated_by, 'testuser')
+        
+        # Verificar que los metadatos se actualizaron
+        self.assertEqual(updated_image.width, 200)
+        self.assertEqual(updated_image.height, 200)
+    
+    def test_serializer_read_only_fields(self):
+        """Test que los campos autocompletados son read-only"""
+        from .serializers import ProductImageSerializer
+        
+        image = self.create_test_image()
+        data = {
+            'product': self.product.id,
+            'image': image,
+            'file_size': 999999,  # Intento de manipulación
+            'width': 5000,        # Intento de manipulación
+            'height': 5000,       # Intento de manipulación
+        }
+        
+        serializer = ProductImageSerializer(
+            data=data,
+            context={'request': type('Request', (), {'user': self.user})()}
+        )
+        
+        self.assertTrue(serializer.is_valid())
+        product_image = serializer.save()
+        
+        # Verificar que los campos no fueron manipulados
+        self.assertNotEqual(product_image.file_size, 999999)
+        self.assertNotEqual(product_image.width, 5000)
+        self.assertNotEqual(product_image.height, 5000)
