@@ -16,11 +16,18 @@ class ProductViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de productos
     
-    - Lectura: Usuarios autenticados con permiso view_product
-    - Escritura: Usuarios autenticados con permiso add/change/delete_product
+    - Lectura: Usuarios autenticados
+    - Creación: Usuarios con permiso add_product
+    - Actualización: Usuarios con permiso change_product
+    - Eliminación: Usuarios con permiso delete_product
     """
-    queryset = Product.objects.all().prefetch_related('variants', 'images')
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
+    filterset_fields = ['brand', 'active']
+    search_fields = ['name', 'brand', 'description']
+    ordering_fields = ['name', 'created_at', 'updated_at']
+    ordering = ['name']
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:
@@ -37,6 +44,10 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
     queryset = ProductVariant.objects.all().select_related('product')
     serializer_class = ProductVariantSerializer
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
+    filterset_fields = ['product', 'gender', 'color', 'active']
+    search_fields = ['product__name', 'product__brand', 'color', 'size']
+    ordering_fields = ['price', 'cost', 'created_at', 'product__name']
+    ordering = ['product__name', 'color', 'size']
 
 
 class ProductImageViewSet(viewsets.ModelViewSet):

@@ -3,10 +3,10 @@ Views principal - Importaciones desde módulos organizados
 """
 
 from .users.views import UserViewSet, GroupViewSet
-from .sales.views import SaleViewSet, SaleDetailViewSet
-from .suppliers.views import SupplierViewSet
+from .sales.views import SaleViewSet, SaleDetailViewSet, SaleReturnViewSet
+from .suppliers.views import SupplierViewSet, SupplierReturnViewSet
 from .products.views import ProductViewSet, ProductVariantViewSet, ProductImageViewSet
-from .inventory_management import (
+from .inventory_management.views import (
     MovementInventoryViewSet,
     InventoryHistoryViewSet,
     InventoryReportDailyViewSet,
@@ -14,6 +14,8 @@ from .inventory_management import (
     InventoryCloseMonthView,
     AdjustmentViewSet,
 )
+from .purchase.views import PurchaseViewSet
+from .dashboard.views import DashboardViewSet
 
 # Exportar todos los ViewSets para que estén disponibles
 __all__ = [
@@ -23,6 +25,10 @@ __all__ = [
     # Sales
     "SaleViewSet",
     "SaleDetailViewSet",
+    "SaleReturnViewSet",
+    # Suppliers
+    "SupplierViewSet",
+    "SupplierReturnViewSet",
     # Products
     "ProductViewSet",
     "ProductVariantViewSet",
@@ -34,6 +40,8 @@ __all__ = [
     "InventorySnapshotViewSet",
     "InventoryCloseMonthView",
     "AdjustmentViewSet",
-    # Suppliers
-    "SupplierViewSet",
+    # Purchase
+    "PurchaseViewSet",
+    # Dashboard
+    "DashboardViewSet",
 ]

@@ -33,8 +33,11 @@ from inventory.views import InventoryCloseMonthView
 router = routers.DefaultRouter()
 router.register(r"users", views.UserViewSet, basename="users")
 router.register(r"groups", views.GroupViewSet, basename="groups")
+router.register(r"dashboard", views.DashboardViewSet, basename="dashboard")
 router.register(r"sales", views.SaleViewSet, basename="sales")
 router.register(r"sale-details", views.SaleDetailViewSet, basename="sale-details")
+router.register(r"sale-returns", views.SaleReturnViewSet, basename="sale-returns")
+router.register(r"purchases", views.PurchaseViewSet, basename="purchases")
 router.register(r"products", views.ProductViewSet, basename="products")
 router.register(
     r"product-variants", views.ProductVariantViewSet, basename="product-variants"
@@ -58,6 +61,9 @@ router.register(
 )
 router.register(
     r"suppliers", views.SupplierViewSet, basename="suppliers"
+)
+router.register(
+    r"supplier-returns", views.SupplierReturnViewSet, basename="supplier-returns"
 )
 
 urlpatterns = [
