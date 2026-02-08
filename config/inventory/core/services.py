@@ -221,6 +221,251 @@ def close_inventory_month(year: int, month: int) -> None:
             )
 
 
+def create_purchase(variant_id: int, quantity: int, unit_cost: float, supplier_name: str = "", user=None) -> MovementInventory:
+    """
+    Crear movimiento de compra (entrada de inventario)
+    
+    Args:
+        variant_id: ID de la variante de producto
+        quantity: Cantidad comprada (debe ser positiva)
+        unit_cost: Costo unitario del producto
+        supplier_name: Nombre del proveedor (opcional)
+        user: Usuario que realiza la acción
+    
+    Returns:
+        MovementInventory: Movimiento creado
+    
+    Raises:
+        ValidationError: Si la cantidad es negativa o cero
+    """
+    if quantity <= 0:
+        raise ValidationError("La cantidad de compra debe ser mayor a cero")
+    
+    if unit_cost <= 0:
+        raise ValidationError("El costo unitario debe ser mayor a cero")
+    
+    # Validar que la variante exista
+    try:
+        variant = ProductVariant.objects.get(id=variant_id)
+    except ProductVariant.DoesNotExist:
+        raise ValidationError("La variante de producto no existe")
+    
+    with transaction.atomic():
+        # Crear movimiento de compra
+        movement = MovementInventory.objects.create(
+            variant=variant,
+            quantity=quantity,  # Positivo = entrada
+            movement_type=MovementInventory.MovementType.PURCHASE,
+            observation=f"Compra - Proveedor: {supplier_name}" if supplier_name else "Compra directa",
+            created_by=user.username if user else "system",
+        )
+        
+        # Registrar en auditoría
+        AuditLog.objects.create(
+            action="create_purchase",
+            entity="movement_inventory",
+            entity_id=movement.id,
+            performed_by=user.username if user else "system",
+            extra_data={
+                "variant_id": variant_id,
+                "quantity": quantity,
+                "unit_cost": float(unit_cost),
+                "supplier_name": supplier_name,
+                "product_name": variant.product.name,
+            },
+        )
+        
+        return movement
+
+
+def create_adjustment(variant_id: int, quantity: int, reason: str, user=None) -> MovementInventory:
+    """
+    Crear ajuste de inventario (corrección manual)
+    
+    Args:
+        variant_id: ID de la variante de producto
+        quantity: Cantidad a ajustar (positiva = entrada, negativa = salida)
+        reason: Motivo del ajuste (requerido)
+        user: Usuario que realiza la acción
+    
+    Returns:
+        MovementInventory: Movimiento creado
+    
+    Raises:
+        ValidationError: Si no se proporciona motivo
+    """
+    if not reason or not reason.strip():
+        raise ValidationError("El motivo del ajuste es requerido")
+    
+    # Validar que la variante exista
+    try:
+        variant = ProductVariant.objects.get(id=variant_id)
+    except ProductVariant.DoesNotExist:
+        raise ValidationError("La variante de producto no existe")
+    
+    with transaction.atomic():
+        # Crear movimiento de ajuste
+        movement = MovementInventory.objects.create(
+            variant=variant,
+            quantity=quantity,  # Puede ser positivo o negativo
+            movement_type=MovementInventory.MovementType.ADJUSTMENT,
+            observation=f"Ajuste: {reason}",
+            created_by=user.username if user else "system",
+        )
+        
+        # Registrar en auditoría
+        AuditLog.objects.create(
+            action="create_adjustment",
+            entity="movement_inventory",
+            entity_id=movement.id,
+            performed_by=user.username if user else "system",
+            extra_data={
+                "variant_id": variant_id,
+                "quantity": quantity,
+                "reason": reason,
+                "product_name": variant.product.name,
+            },
+        )
+        
+        return movement
+
+
+def create_sale_return(sale_id: int, items: list, reason: str, user=None) -> list:
+    """
+    Crear devolución de venta (entrada de inventario)
+    
+    Args:
+        sale_id: ID de la venta original
+        items: Lista de items a devolver [{'sale_detail_id': 1, 'quantity': 2}]
+        reason: Motivo de la devolución
+        user: Usuario que realiza la acción
+    
+    Returns:
+        list: Movimientos creados
+    
+    Raises:
+        ValidationError: Si la venta no existe o no está completada
+    """
+    # Validar venta
+    try:
+        sale = Sale.objects.get(id=sale_id)
+    except Sale.DoesNotExist:
+        raise ValidationError("La venta no existe")
+    
+    if sale.status != "completed":
+        raise ValidationError("Solo se pueden devolver ventas completadas")
+    
+    movements_created = []
+    
+    with transaction.atomic():
+        for item in items:
+            sale_detail_id = item.get('sale_detail_id')
+            quantity = item.get('quantity')
+            
+            # Validar detalle de venta
+            try:
+                detail = SaleDetail.objects.get(id=sale_detail_id, sale=sale)
+            except SaleDetail.DoesNotExist:
+                raise ValidationError(f"El detalle de venta {sale_detail_id} no existe")
+            
+            if quantity <= 0:
+                raise ValidationError("La cantidad a devolver debe ser mayor a cero")
+            
+            if quantity > detail.quantity:
+                raise ValidationError(f"No se pueden devolver más de {detail.quantity} unidades")
+            
+            # Crear movimiento de devolución
+            movement = MovementInventory.objects.create(
+                variant=detail.variant,
+                quantity=quantity,  # Positivo = entrada
+                movement_type=MovementInventory.MovementType.SALE_RETURN,
+                observation=f"Devolución venta #{sale.id} - {reason}",
+                created_by=user.username if user else "system",
+            )
+            
+            movements_created.append(movement)
+            
+            # Registrar en auditoría
+            AuditLog.objects.create(
+                action="create_sale_return",
+                entity="movement_inventory",
+                entity_id=movement.id,
+                performed_by=user.username if user else "system",
+                extra_data={
+                    "sale_id": sale_id,
+                    "sale_detail_id": sale_detail_id,
+                    "quantity": quantity,
+                    "reason": reason,
+                    "product_name": detail.variant.product.name,
+                },
+            )
+        
+        return movements_created
+
+
+def create_supplier_return(variant_id: int, quantity: int, reason: str, supplier_name: str = "", user=None) -> MovementInventory:
+    """
+    Crear devolución a proveedor (salida de inventario)
+    
+    Args:
+        variant_id: ID de la variante de producto
+        quantity: Cantidad a devolver (debe ser positiva)
+        reason: Motivo de la devolución
+        supplier_name: Nombre del proveedor
+        user: Usuario que realiza la acción
+    
+    Returns:
+        MovementInventory: Movimiento creado
+    
+    Raises:
+        ValidationError: Si la cantidad es negativa o no hay stock suficiente
+    """
+    if quantity <= 0:
+        raise ValidationError("La cantidad a devolver debe ser mayor a cero")
+    
+    if not reason or not reason.strip():
+        raise ValidationError("El motivo de la devolución es requerido")
+    
+    # Validar que la variante exista
+    try:
+        variant = ProductVariant.objects.get(id=variant_id)
+    except ProductVariant.DoesNotExist:
+        raise ValidationError("La variante de producto no existe")
+    
+    # Validar stock disponible
+    current_stock = variant.stock
+    if current_stock < quantity:
+        raise ValidationError(f"Stock insuficiente. Actual: {current_stock}, Requerido: {quantity}")
+    
+    with transaction.atomic():
+        # Crear movimiento de devolución a proveedor
+        movement = MovementInventory.objects.create(
+            variant=variant,
+            quantity=-quantity,  # Negativo = salida
+            movement_type=MovementInventory.MovementType.RETURN,
+            observation=f"Devolución proveedor {supplier_name} - {reason}" if supplier_name else f"Devolución proveedor - {reason}",
+            created_by=user.username if user else "system",
+        )
+        
+        # Registrar en auditoría
+        AuditLog.objects.create(
+            action="create_supplier_return",
+            entity="movement_inventory",
+            entity_id=movement.id,
+            performed_by=user.username if user else "system",
+            extra_data={
+                "variant_id": variant_id,
+                "quantity": quantity,
+                "reason": reason,
+                "supplier_name": supplier_name,
+                "product_name": variant.product.name,
+                "current_stock": current_stock,
+            },
+        )
+        
+        return movement
+
+
 class ImageService:
     """Servicio para procesamiento y gestión de imágenes de productos"""
     

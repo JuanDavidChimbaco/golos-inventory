@@ -20,6 +20,10 @@ __all__ = [
     # Servicios
     'ImageService',
     'confirm_sale',
+    'create_purchase',
+    'create_adjustment', 
+    'create_sale_return',
+    'create_supplier_return',
     
     # Utilidades - Archivos
     'get_file_size_mb',

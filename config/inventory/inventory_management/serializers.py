@@ -11,8 +11,10 @@ class MovementInventorySerializer(serializers.ModelSerializer):
     movement_type = serializers.ChoiceField(
         choices=[
             ("purchase", "Compra"),
+            ("sale_out", "Salida por venta"),
+            ("sale_return", "Devolución de venta"),
             ("adjustment", "Ajuste"),
-            ("return", "Devolución"),
+            ("return", "Devolución proveedor"),
         ]
     )
     
