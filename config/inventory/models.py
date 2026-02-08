@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Sum
 
 # Create your models here.
 
@@ -25,6 +26,13 @@ class Product(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.CharField(max_length=50)  # mientras se usa user
     updated_by = models.CharField(max_length=50)  # mientras se usa user
+
+    class Meta:
+        permissions = [
+            # Permisos personalizados únicos (los demás son creados automáticamente por Django)
+            ("confirm_sale", "Can confirm sales"),
+            ("manage_inventory", "Can manage inventory"),
+        ]
 
     def __str__(self):
         return self.name
@@ -123,6 +131,12 @@ class ProductVariant(models.Model):
 
     class Meta:
         unique_together = ("product", "gender", "color", "size")
+    
+    @property
+    def stock(self):
+        return self.movements.aggregate(
+            total=Sum("quantity")
+        )["total"] or 0
 
 
 class MovementInventory(models.Model):
@@ -130,29 +144,38 @@ class MovementInventory(models.Model):
 
     Attributes:
         variant (ForeignKey): Variante de producto al que pertenece el movimiento
-        movement_type (CharField): Tipo de movimiento
+        movement_type (CharField): Tipo de movimiento (compra, venta, ajuste, devolución)
         quantity (PositiveIntegerField): Cantidad del movimiento
         observation (TextField): Observación del movimiento
         created_at (DateTimeField): Fecha de creación
         created_by (CharField): Usuario que creó el movimiento
     """
+    class MovementType(models.TextChoices):
+        """Tipos de movimiento de inventario"""
+        
+        PURCHASE = "purchase", "Compra"
+        SALE_OUT = "sale_out", "Salida por venta"
+        SALE_RETURN = "sale_return", "Devolución de venta"
+        ADJUSTMENT = "adjustment", "Ajuste"
+        RETURN = "return", "Devolución proveedor"
 
     variant = models.ForeignKey(
         ProductVariant, on_delete=models.PROTECT, related_name="movements"
     )
     movement_type = models.CharField(
-        max_length=50,
-        choices=[
-            ("purchase", "Purchase"),
-            ("sale", "Sale"),
-            ("adjustment", "Adjustment"),
-            ("return", "Return"),
-        ],
+        max_length=20,
+        choices=MovementType.choices
     )
     quantity = models.IntegerField()
     observation = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.CharField(max_length=50)
+
+    class Meta:
+        permissions = [
+            # Permisos personalizados únicos (los demás son creados automáticamente por Django)
+            ("manage_inventory", "Can manage inventory"),
+        ]
 
     def __str__(self):
         return f"Movement of {self.variant.product.name} - {self.movement_type} {self.quantity}"
@@ -187,6 +210,12 @@ class Sale(models.Model):
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     active = models.BooleanField(default=True)
 
+    class Meta:
+        permissions = [
+            # Permisos personalizados únicos (los demás son creados automáticamente por Django)
+            ("confirm_sale", "Can confirm sales"),
+        ]
+
     def __str__(self):
         return f"Sale to {self.customer} - {self.status}"
 
@@ -215,3 +244,44 @@ class SaleDetail(models.Model):
 
     class Meta:
         unique_together = ("sale", "variant")
+
+
+class AuditLog(models.Model):
+    """
+    Log de auditoría para rastrear acciones realizadas en el sistema
+    """
+    action = models.CharField(max_length=100)
+    entity = models.CharField(max_length=100)
+    entity_id = models.PositiveIntegerField()
+    performed_by = models.CharField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+    extra_data = models.JSONField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.action} - {self.entity} ({self.entity_id})"
+
+
+class InventorySnapshot(models.Model):
+    """
+    Snapshot mensual del inventario por variante
+    """
+    month = models.DateField()  # Siempre usar el primer día del mes
+    variant = models.ForeignKey(
+        ProductVariant,
+        on_delete=models.PROTECT,
+        related_name="snapshots"
+    )
+
+    stock_opening = models.IntegerField()
+    total_in = models.IntegerField()
+    total_out = models.IntegerField()
+    stock_closing = models.IntegerField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("month", "variant")
+        ordering = ["-month", "variant"]
+
+    def __str__(self):
+        return f"{self.variant} - {self.month} ({self.stock_closing})"
