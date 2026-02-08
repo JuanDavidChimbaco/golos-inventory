@@ -1,57 +1,139 @@
 # Golos Inventory - Guía de Producción
 
-**Sistema de gestión de inventario para productos y ventas**
+**Sistema de gestión de inventario y ventas con Django Permissions y arquitectura modular**
 
 Desarrollado por David Chimbaco
 
-## 🚀 Despliegue en Producción
+---
 
-Esta guía te ayudará a desplegar Golos Inventory en un entorno de producción.
+## 🎯 **Visión General**
 
-## 📋 Requisitos de Producción
+Esta guía te ayudará a desplegar Golos Inventory en un entorno de producción con la arquitectura actualizada, permisos granulares y scripts organizados.
 
-- **Servidor**: Ubuntu 20.04+ / CentOS 8+ / Amazon Linux 2
+---
+
+## 📋 **Requisitos de Producción**
+
+### **🖥️ Servidor:**
+- **Ubuntu 20.04+** / **CentOS 8+** / **Amazon Linux 2**
+- **Mínimo**: 2 CPU, 4GB RAM, 20GB SSD
+- **Recomendado**: 4 CPU, 8GB RAM, 50GB SSD
+
+### **🐍 Software:**
 - **Python**: 3.8+
 - **Base de datos**: PostgreSQL 12+ (recomendado)
-- **Servidor web**: Nginx
-- **Servidor de aplicaciones**: Gunicorn
+- **Servidor web**: Nginx 1.18+
+- **Servidor de aplicaciones**: Gunicorn 20+
 - **SSL/TLS**: Certificado SSL (Let's Encrypt recomendado)
 
-## 🛠️ Configuración del Servidor
+### **� Herramientas:**
+- **Git** para control de versiones
+- **Docker** (opcional para contenerización)
+- **Redis** (opcional para caching)
 
-### 1. Actualizar el sistema
+---
+
+## �🛠️ **Configuración del Servidor**
+
+### **1. Actualizar el sistema**
 ```bash
-sudo apt update && sudo apt upgrade -y  # Ubuntu/Debian
-# sudo yum update -y                       # CentOS/RHEL
+# Ubuntu/Debian
+sudo apt update && sudo apt upgrade -y
+
+# CentOS/RHEL
+sudo yum update -y
+sudo yum upgrade -y
 ```
 
-### 2. Instalar dependencias
+### **2. Instalar dependencias**
 ```bash
 # Python y herramientas
-sudo apt install python3 python3-pip python3-venv nginx postgresql postgresql-contrib -y
+sudo apt install python3 python3-pip python3-venv python3-dev build-essential libpq-dev
 
-# Herramientas adicionales
-sudo apt install build-essential libpq-dev -y
+# PostgreSQL
+sudo apt install postgresql postgresql-contrib
+
+# Nginx
+sudo apt install nginx
+
+# Git
+sudo apt install git
 ```
 
-### 3. Configurar PostgreSQL
+### **3. Crear usuario de aplicación**
 ```bash
-# Cambiar a usuario postgres
-sudo -u postgres psql
+sudo adduser golos
+sudo usermod -aG sudo golos
+sudo su - golos
+```
+
+---
+
+## 📁 **Estructura del Proyecto en Producción**
+
+### **🗂️ Directorios Recomendados:**
+```
+/home/golos/
+├── 📁 golos-inventory/          # Código fuente
+├── 📁 .venv/                   # Entorno virtual
+├── 📁 logs/                    # Logs de aplicación
+├── 📁 media/                   # Archivos multimedia
+├── 📁 static/                  # Archivos estáticos
+└── 📁 backups/                 # Backups de BD
+```
+
+### **🔧 Configuración de Permisos:**
+```bash
+# Asegurar permisos correctos
+chmod 755 /home/golos/golos-inventory
+chmod +x /home/golos/golos-inventory/manage.py
+```
+
+---
+
+## 🐘 **Configuración de Base de Datos**
+
+### **1. Instalar y configurar PostgreSQL**
+```bash
+# Instalar PostgreSQL
+sudo apt install postgresql postgresql-contrib
+
+# Iniciar servicio
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
 
 # Crear base de datos y usuario
+sudo -u postgres psql
 CREATE DATABASE golos_inventory;
-CREATE USER golos_user WITH PASSWORD 'tu_password_seguro';
+CREATE USER golos_user WITH PASSWORD 'contraseña_segura';
 GRANT ALL PRIVILEGES ON DATABASE golos_inventory TO golos_user;
 \q
 ```
 
-### 4. Clonar y configurar la aplicación
+### **2. Configurar PostgreSQL**
 ```bash
-# Clonar el repositorio
-cd /var/www/
-sudo git clone <url-del-repositorio> golos-inventory
-sudo chown -R $USER:$USER /var/www/golos-inventory
+# Editar configuración
+sudo nano /etc/postgresql/12/main/postgresql.conf
+
+# Ajustar configuración
+listen_addresses = 'localhost'
+max_connections = 100
+shared_buffers = 256MB
+effective_cache_size = 1GB
+
+# Reiniciar PostgreSQL
+sudo systemctl restart postgresql
+```
+
+---
+
+## 🚀 **Configuración de la Aplicación**
+
+### **1. Clonar y configurar**
+```bash
+# Clonar repositorio
+cd /home/golos
+git clone https://github.com/JuanDavidChimbaco/golos-inventory.git
 cd golos-inventory
 
 # Crear entorno virtual
@@ -59,261 +141,526 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Instalar dependencias
+pip install -r requirements.txt
+```
+
+### **2. Configurar variables de entorno**
+```bash
+# Crear archivo de entorno para producción
+python manage.py shell -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+
+# Crear .env.production con clave generada
+echo "SECRET_KEY='tu-clave-generada-aqui'" > .env.production
+echo "DEBUG=False" >> .env.production
+echo "ALLOWED_HOSTS=tudominio.com,www.tudominio.com" >> .env.production
+echo "DATABASE_URL=postgresql://golos_user:contraseña_segura@localhost:5432/golos_inventory" >> .env.production
+
+# Editar archivo con tus datos reales
+nano .env.production
+```
+
+**Variables esenciales:**
+```bash
+# Seguridad
+SECRET_KEY='tu_clave_secreta_muy_larga_y_aleatoria'
+DEBUG=False
+ALLOWED_HOSTS=['tudominio.com', 'www.tudominio.com']
+
+# Base de datos
+DATABASE_URL=postgresql://golos_user:contraseña_segura@localhost:5432/golos_inventory
+
+# Estático y media
+STATIC_URL=/static/
+STATIC_ROOT=/home/golos/golos-inventory/static/
+MEDIA_URL=/media/
+MEDIA_ROOT=/home/golos/golos-inventory/media/
+
+# Email (opcional)
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=tu_email@gmail.com
+EMAIL_HOST_PASSWORD=tu_contraseña_app
+```
+
+### **3. Aplicar migraciones y configurar permisos**
+```bash
 cd config
-pip install -r ../requirements.txt
-pip install gunicorn psycopg2-binary
+python manage.py migrate
+
+# Configurar permisos y grupos
+python manage.py shell < inventory/scripts/setup_permissions.py
+
+# Crear superusuario
+python manage.py createsuperuser
+python manage.py collectstatic --noinput
 ```
 
-### 6. Configurar variables de entorno
-Copiar y configurar el archivo de entorno de producción:
+---
+
+## 🌐 **Configuración de Nginx**
+
+### **1. Crear configuración de Nginx**
 ```bash
-cp .env.production .env
-nano .env  # Editar con tus valores reales
+sudo nano /etc/nginx/sites-available/golos-inventory
 ```
 
-**Importante:** Configura estos valores en `.env`:
-- `SECRET_KEY`: Genera una nueva clave segura
-- `ALLOWED_HOSTS`: Agrega tus dominios
-- `DATABASE_URL`: Configura tu PostgreSQL
-- `EMAIL_*`: Configura tu servicio de email
+**Configuración completa:**
+```nginx
+server {
+    listen 80;
+    server_name tudominio.com www.tudominio.com;
+    return 301 https://$server_name$request_uri;
 
-### 7. Migrar la base de datos
+    server {
+        listen 443 ssl http2;
+        server_name tudominio.com www.tudominio.com;
+
+        # SSL
+        ssl_certificate /etc/letsencrypt/live/tudominio.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/tudominio.com/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+        ssl_prefer_server_ciphers off;
+
+        # Seguridad
+        add_header X-Frame-Options "SAMEORIGIN";
+        add_header X-Content-Type-Options "nosniff";
+        add_header X-XSS-Protection "1; mode=block";
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+
+        # Archivos estáticos
+        location /static/ {
+            alias /home/golos/golos-inventory/static/;
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+
+        location /media/ {
+            alias /home/golos/golos-inventory/media/;
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+
+        # Aplicación
+        location / {
+            proxy_pass http://127.0.0.1:8000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Timeouts
+            proxy_connect_timeout 60s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+        }
+
+        # API Documentation
+        location /api/ {
+            proxy_pass http://127.0.0.1:8000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+```
+
+### **2. Activar configuración**
 ```bash
-python manage.py migrate --settings=config.settings_production
+sudo ln -s /etc/nginx/sites-available/golos-inventory /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
 ```
 
-### 8. Crear superusuario
+---
+
+## 🐧 **Configuración de Gunicorn**
+
+### **1. Crear archivo de servicio Gunicorn**
 ```bash
-python manage.py createsuperuser --settings=config.settings_production
+nano /etc/systemd/system/golos-inventory.service
 ```
 
-### 9. Recolectar archivos estáticos
-```bash
-python manage.py collectstatic --settings=config.settings_production --noinput
-```
-
-## 🔧 Configuración de Gunicorn
-
-Crear archivo de servicio Gunicorn:
-```bash
-sudo nano /etc/systemd/system/gunicorn.service
-```
-
-Contenido:
 ```ini
 [Unit]
-Description=gunicorn daemon for Golos Inventory
+Description=Gunicorn instance for Golos Inventory
 After=network.target
 
 [Service]
-User=www-data
-Group=www-data
-WorkingDirectory=/var/www/golos-inventory/config
-ExecStart=/var/www/golos-inventory/.venv/bin/gunicorn \
+User=golos
+Group=golos
+WorkingDirectory=/home/golos/golos-inventory
+Environment=PATH=/home/golos/golos-inventory/.venv/bin
+ExecStart=/home/golos/golos-inventory/.venv/bin/gunicorn \
     --workers 3 \
-    --bind unix:/var/www/golos-inventory/gunicorn.sock \
-    config.wsgi:application \
-    --settings=config.settings_production
+    --worker-class sync \
+    --worker-connections 1000 \
+    --max-requests 1000 \
+    --max-requests-jitter 100 \
+    --timeout 30 \
+    --keep-alive 5 \
+    --bind unix:/run/golos-inventory.sock \
+    config.wsgi:application
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Iniciar y habilitar Gunicorn:
+### **2. Activar y iniciar servicio**
 ```bash
-sudo systemctl start gunicorn
-sudo systemctl enable gunicorn
+sudo systemctl daemon-reload
+sudo systemctl enable golos-inventory.service
+sudo systemctl start golos-inventory.service
 ```
 
-## 🌐 Configuración de Nginx
+---
 
-Crear configuración de Nginx:
+## � **Configuración SSL con Let's Encrypt**
+
+### **1. Instalar Certbot**
 ```bash
-sudo nano /etc/nginx/sites-available/golos-inventory
+sudo apt install certbot python3-certbot-nginx
 ```
 
-Contenido:
-```nginx
-server {
-    listen 80;
-    server_name tudominio.com www.tudominio.com;
-
-    location = /favicon.ico { access_log off; log_not_found off; }
-    
-    location /static/ {
-        root /var/www/golos-inventory;
-    }
-
-    location /media/ {
-        root /var/www/golos-inventory;
-    }
-
-    location / {
-        include proxy_params;
-        proxy_pass http://unix:/var/www/golos-inventory/gunicorn.sock;
-    }
-}
-```
-
-Activar el sitio:
+### **2. Obtener certificado**
 ```bash
-sudo ln -s /etc/nginx/sites-available/golos-inventory /etc/nginx/sites-enabled
-sudo nginx -t
-sudo systemctl restart nginx
-```
-
-## 🔒 Configuración SSL con Let's Encrypt
-
-```bash
-# Instalar Certbot
-sudo apt install certbot python3-certbot-nginx -y
-
-# Obtener certificado
 sudo certbot --nginx -d tudominio.com -d www.tudominio.com
-
-# Configurar renovación automática
-sudo crontab -e
-# Agregar: 0 12 * * * /usr/bin/certbot renew --quiet
 ```
 
-## 🔧 Configuración Adicional para Producción
+### **3. Renovación automática**
+```bash
+sudo crontab -e
+0 12 * * * /usr/bin/certbot renew --quiet
+```
 
-### Actualizar settings.py para producción
-Asegúrate de tener estas configuraciones en `config/config/settings.py`:
+---
 
-```python
-# Seguridad
-SECURE_SSL_REDIRECT = True
-SECURE_HSTS_SECONDS = 31536000
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
-SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_BROWSER_XSS_FILTER = True
-SECURE_FRAME_DENY = True
-X_FRAME_OPTIONS = 'DENY'
+## � **Configuración de Monitoreo**
 
-# Sesiones
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_HTTPONLY = True
-
-# Base de datos PostgreSQL
-import dj_database_url
-
-DATABASES = {
-    'default': dj_database_url.parse(os.getenv('DATABASE_URL'))
+### **1. Logs de la aplicación**
+```bash
+# Configurar logging en settings.py
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process} {thread} {message}',
+        },
+        'file': {
+            'format': '{levelname} {asctime} {module} {process} {thread} {message}',
+            'filename': '/home/golos/golos-inventory/logs/django.log',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': '/home/golos/golos-inventory/logs/django.log',
+            'formatter': 'file',
+        },
+    },
+    'root': {
+        'handlers': ['file'],
+        'level': 'INFO',
+    },
 }
 ```
 
-### Instalar dependencias adicionales
+### **2. Logs de Nginx**
 ```bash
-pip install dj-database-url
+# Configurar logrotate
+sudo nano /etc/logrotate.d/golos-inventory
 ```
 
-## 📊 Monitoreo y Logs
-
-### Ver logs de Gunicorn
-```bash
-sudo journalctl -u gunicorn
+```nginx
+/home/golos/golos-inventory/logs/*.log {
+    daily
+    missingok
+    rotate 52
+    compress
+    delaycompress
+    notifempty
+    create 644 golos golos www-data
+    postrotate
+        systemctl reload nginx
+}
 ```
 
-### Ver logs de Nginx
+---
+
+## � **Proceso de Despliegue**
+
+### **1. Preparación del entorno**
 ```bash
-sudo tail -f /var/log/nginx/access.log
-sudo tail -f /var/log/nginx/error.log
+# Actualizar sistema
+sudo apt update && sudo apt upgrade -y
+
+# Crear usuario
+sudo adduser golos
+sudo usermod -aG sudo golos
 ```
 
-### Reiniciar servicios
+### **2. Configuración de base de datos**
 ```bash
-sudo systemctl restart gunicorn
-sudo systemctl restart nginx
+# Instalar PostgreSQL
+sudo apt install postgresql postgresql-contrib
+
+# Crear base de datos
+sudo -u postgres createdb golos_inventory
+sudo -u postgres createuser golos_user
+sudo -u postgres psql -c "ALTER USER golos_user WITH PASSWORD 'contraseña_segura';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE golos_inventory TO golos_user;"
 ```
 
-## 🔄 Actualizaciones
-
-### Para actualizar la aplicación en producción:
-
+### **3. Despliegue de la aplicación**
 ```bash
-cd /var/www/golos-inventory
+# Clonar y configurar
+git clone https://github.com/JuanDavidChimbaco/golos-inventory.git
+cd golos-inventory
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Configurar variables
+# Crear archivo de entorno para producción
+python manage.py shell -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+
+# Crear .env.production con clave generada
+echo "SECRET_KEY='tu-clave-generada-aqui'" > .env.production
+echo "DEBUG=False" >> .env.production
+echo "ALLOWED_HOSTS=tudominio.com,www.tudominio.com" >> .env.production
+echo "DATABASE_URL=postgresql://golos_user:contraseña_segura@localhost:5432/golos_inventory" >> .env.production
+
+# Editar .env.production con datos reales
+
+# Migrar y configurar
+cd config
+python manage.py migrate
+python manage.py shell < inventory/scripts/setup_permissions.py
+python manage.py createsuperuser
+python manage.py collectstatic --noinput
+```
+
+### **4. Configuración de servicios**
+```bash
+# Configurar Nginx
+sudo nano /etc/nginx/sites-available/golos-inventory
+sudo ln -s /etc/nginx/sites-available/golos-inventory /etc/nginx/sites-enabled/
+sudo nginx -t
+
+# Configurar Gunicorn
+sudo nano /etc/systemd/system/golos-inventory.service
+sudo systemctl daemon-reload
+sudo systemctl enable golos-inventory.service
+sudo systemctl start golos-inventory.service
+
+# Configurar SSL
+sudo certbot --nginx -d tudominio.com -d www.tudominio.com
+```
+
+### **5. Verificación final**
+```bash
+# Verificar servicios
+sudo systemctl status nginx
+sudo systemctl status golos-inventory
+sudo systemctl status postgresql
+
+# Verificar aplicación
+curl -I http://localhost:8000/api/docs/
+curl -I https://tudominio.com/api/docs/
+```
+
+---
+
+## 🔧 **Scripts de Mantenimiento**
+
+### **1. Backup de base de datos**
+```bash
+#!/bin/bash
+# backup_db.sh
+BACKUP_DIR="/home/golos/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="$BACKUP_DIR/golos_inventory_$DATE.sql"
+
+mkdir -p $BACKUP_DIR
+pg_dump -h localhost -U golos_user -d golos_inventory > $BACKUP_FILE
+
+echo "Backup completado: $BACKUP_FILE"
+```
+
+### **2. Actualización de la aplicación**
+```bash
+#!/bin/bash
+# update_app.sh
+cd /home/golos/golos-inventory
 git pull origin main
 source .venv/bin/activate
 pip install -r requirements.txt
 cd config
-python manage.py migrate --settings=config.settings_production
-python manage.py collectstatic --settings=config.settings_production --noinput
-sudo systemctl restart gunicorn
+python manage.py migrate
+python manage.py collectstatic --noinput
+sudo systemctl restart golos-inventory
 ```
 
-## 🚨 Seguridad Adicional
-
-### Configurar firewall
-```bash
-sudo ufw allow ssh
-sudo ufw allow 'Nginx Full'
-sudo ufw enable
-```
-
-### Backup de la base de datos
-```bash
-# Crear script de backup
-sudo nano /usr/local/bin/backup_golos.sh
-```
-
-Contenido del script:
+### **3. Verificación de permisos**
 ```bash
 #!/bin/bash
-BACKUP_DIR="/var/backups/golos-inventory"
-DATE=$(date +%Y%m%d_%H%M%S)
-mkdir -p $BACKUP_DIR
-
-pg_dump -h localhost -U golos_user golos_inventory > $BACKUP_DIR/backup_$DATE.sql
-find $BACKUP_DIR -name "backup_*.sql" -mtime +7 -delete
+# check_permissions.sh
+cd /home/golos/golos-inventory
+source .venv/bin/activate
+cd config
+python manage.py shell < inventory/scripts/setup_permissions.py
 ```
-
-Hacer ejecutable y programar:
-```bash
-sudo chmod +x /usr/local/bin/backup_golos.sh
-sudo crontab -e
-# Agregar: 0 2 * * * /usr/local/bin/backup_golos.sh
-```
-
-## 📈 Rendimiento
-
-### Optimización adicional
-- Configurar Redis para caché
-- Usar CDN para archivos estáticos
-- Configurar balanceador de carga si es necesario
-- Monitorear con herramientas como New Relic o DataDog
-
-## 🆘 Troubleshooting
-
-### Problemas comunes:
-1. **Error 502 Bad Gateway**: Gunicorn no está corriendo
-2. **Error 504 Gateway Timeout**: Timeout de la aplicación
-3. **Static files not found**: Revisar configuración de Nginx
-4. **Database connection failed**: Verificar credenciales de PostgreSQL
-
-### Comandos útiles:
-```bash
-# Verificar estado de servicios
-sudo systemctl status gunicorn nginx
-
-# Verificar conexiones a la base de datos
-sudo -u postgres psql -c "\l"
-
-# Probar configuración de Nginx
-sudo nginx -t
-```
-
-## 👨‍💻 Soporte
-
-**David Chimbaco**
-- Desarrollador de Software
-- Creador de Golos Inventory
-
-Para soporte técnico, abre un issue en el repositorio del proyecto.
 
 ---
 
-*Esta guía está diseñada para despliegues en producción. Asegúrate de probar en un entorno de staging antes de aplicar en producción.*
+## 🚨 **Configuración de Seguridad**
+
+### **1. Firewall**
+```bash
+# Configurar UFW
+sudo ufw enable
+sudo ufw allow ssh
+sudo ufw allow 'Nginx Full'
+sudo ufw allow 8000
+sudo ufw allow 5432
+sudo ufw enable
+```
+
+### **2. Seguridad de archivos**
+```bash
+# Permisos de archivos
+chmod 750 /home/golos/golos-inventory
+chmod 640 /home/golos/golos-inventory/logs
+chmod 640 /home/golos/golos-inventory/media
+chmod 640 /home/golos/golos-inventory/static
+```
+
+### **3. Configuración de Django**
+```bash
+# settings.py de producción
+DEBUG=False
+ALLOWED_HOSTS=['tudominio.com', 'www.tudominio.com']
+SECURE_SSL_REDIRECT=True
+SESSION_COOKIE_SECURE=True
+CSRF_COOKIE_SECURE=True
+SECURE_BROWSER_XSS_PROTECTION=True
+SECURE_CONTENT_TYPE_NOSNIFF=True
+```
+
+---
+
+## 📈 **Monitoreo y Logging**
+
+### **1. Logs importantes**
+```bash
+# Logs de Django
+tail -f /home/golos/golos-inventory/logs/django.log
+
+# Logs de Nginx
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+
+# Logs de PostgreSQL
+sudo tail -f /var/log/postgresql/postgresql.log
+```
+
+### **2. Métricas de rendimiento**
+```bash
+# Uso de recursos
+htop -p golos
+
+# Conexiones de base de datos
+psql -U golos_user -d golos_inventory -c "SELECT count(*) FROM auth_user;"
+
+# Espacio en disco
+df -h /home/golos/golos-inventory
+```
+
+---
+
+## 🚨 **Solución de Problemas Comunes**
+
+### **❌ Error 502 Bad Gateway**
+```bash
+# Verificar Gunicorn
+sudo systemctl status golos-inventory
+
+# Verificar socket
+ls -la /run/golos-inventory.sock
+
+# Reiniciar servicios
+sudo systemctl restart golos-inventory
+sudo systemctl restart nginx
+```
+
+### **❌ Error de base de datos**
+```bash
+# Verificar conexión
+psql -U golos_user -h localhost -d golos_inventory
+
+# Verificar logs de PostgreSQL
+sudo tail -f /var/log/postgresql/postgresql.log
+```
+
+### **❌ Error de permisos**
+```bash
+# Verificar permisos de archivos
+ls -la /home/golos/golos-inventory/media
+ls -la /home/golos/golos-inventory/static
+
+# Ejecutar script de permisos
+cd /home/golos/golos-inventory
+python manage.py shell < inventory/scripts/setup_permissions.py
+```
+
+---
+
+## 📞 **Soporte y Monitoreo**
+
+### **📧 Scripts de mantenimiento**
+- **backup_db.sh** - Backup automático de base de datos
+- **update_app.sh** - Actualización de la aplicación
+- **check_permissions.sh** - Verificación de permisos
+
+### **� Monitoreo recomendado**
+- **Prometheus + Grafana** para métricas
+- **Sentry** para error tracking
+- **Uptime Robot** para disponibilidad
+
+---
+
+## 🎯 **Verificación Final**
+
+### **✅ Checklist de despliegue:**
+- [ ] Servidor actualizado y seguro
+- [ ] PostgreSQL configurado y funcionando
+- [ ] Aplicación desplegada y funcionando
+- [ ] Nginx configurado y sirviendo HTTPS
+- [ ] SSL/TLS configurado y válido
+- [ ] Permisos configurados correctamente
+- [ ] Logs configurados y rotando
+- [ ] Scripts de mantenimiento listos
+- [ ] Monitoreo básico configurado
+
+### **🔗 URLs de verificación:**
+- **API**: https://tudominio.com/api/docs/
+- **Admin**: https://tudominio.com/admin/
+- **Health Check**: https://tudominio.com/api/health/
+
+---
+
+## 📚 **Documentación Adicional**
+
+- **📖 Documentación técnica**: `config/inventory/README.md`
+- **📋 Arquitectura**: `config/inventory/docs/ARCHITECTURE.md`
+- **🛠️ Scripts**: `config/inventory/scripts/README.md`
+- **⚙️ Configuración de entorno**: `../README.md#configuración-de-entorno`
+
+---
+
+*Esta guía mantiene el sistema seguro, escalable y bien documentado para producción* 🚀.*
