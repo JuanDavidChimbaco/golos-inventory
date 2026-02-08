@@ -8,7 +8,7 @@ from .products.views import ProductViewSet, ProductVariantViewSet, ProductImageV
 from .inventory_management.views import (
     MovementInventoryViewSet,
     InventoryHistoryViewSet,
-    InventoryReportViewSet,
+    InventoryReportDailyViewSet,
     InventorySnapshotViewSet,
     InventoryCloseMonthView,
 )
@@ -28,7 +28,7 @@ __all__ = [
     # Inventory Management
     "MovementInventoryViewSet",
     "InventoryHistoryViewSet",
-    "InventoryReportViewSet",
+    "InventoryReportDailyViewSet",
     "InventorySnapshotViewSet",
     "InventoryCloseMonthView",
 ]

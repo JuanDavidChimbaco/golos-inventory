@@ -47,7 +47,7 @@ router.register(
     r"inventory-history", views.InventoryHistoryViewSet, basename="inventory-history"
 )
 router.register(
-    r"inventory-report", views.InventoryReportViewSet, basename="inventory-report"
+    r"inventory-report-daily", views.InventoryReportDailyViewSet, basename="inventory-report-daily"
 )
 # router.register(r"audit-logs", views.AuditLogViewSet, basename="audit-logs")
 router.register(

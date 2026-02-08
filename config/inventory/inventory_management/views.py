@@ -72,7 +72,12 @@ class InventoryHistoryViewSet(viewsets.ModelViewSet):
         return super().list(request, *args, **kwargs)
 
 
-class InventoryReportViewSet(viewsets.ViewSet):
+class InventoryReportDailyViewSet(viewsets.ViewSet):
+    """
+    Reporte diario de inventario
+    (Solo Admin y Managers)
+    """
+
     permission_classes = [permissions.IsAuthenticated]
 
     def list(self, request, *args, **kwargs):
@@ -122,6 +127,10 @@ class InventorySnapshotViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class InventoryCloseMonthView(APIView):
+    """
+    Cierre mensual de inventario
+    (Solo Admin y Managers)
+    """
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
