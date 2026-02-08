@@ -28,11 +28,12 @@ from drf_spectacular.views import (
 )
 from inventory import views
 from inventory.views_home import HomeView
+from inventory.views import InventoryCloseMonthView
 
 router = routers.DefaultRouter()
-router.register(r"sales", views.SaleViewSet, basename="sales")
 router.register(r"users", views.UserViewSet, basename="users")
 router.register(r"groups", views.GroupViewSet, basename="groups")
+router.register(r"sales", views.SaleViewSet, basename="sales")
 router.register(r"sale-details", views.SaleDetailViewSet, basename="sale-details")
 router.register(r"products", views.ProductViewSet, basename="products")
 router.register(
@@ -41,6 +42,16 @@ router.register(
 router.register(r"product-images", views.ProductImageViewSet, basename="product-images")
 router.register(
     r"movement-inventory", views.MovementInventoryViewSet, basename="movement-inventory"
+)
+router.register(
+    r"inventory-history", views.InventoryHistoryViewSet, basename="inventory-history"
+)
+router.register(
+    r"inventory-report", views.InventoryReportViewSet, basename="inventory-report"
+)
+# router.register(r"audit-logs", views.AuditLogViewSet, basename="audit-logs")
+router.register(
+    r"inventory-snapshots", views.InventorySnapshotViewSet, basename="inventory-snapshot"
 )
 
 urlpatterns = [
@@ -52,6 +63,7 @@ urlpatterns = [
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     # API endpoints
     path("api/", include(router.urls)),
+    path("inventory/close-month/", InventoryCloseMonthView.as_view()),
     # API Documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
