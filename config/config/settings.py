@@ -158,10 +158,58 @@ SIMPLE_JWT = {
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Golos Inventory API',
-    'DESCRIPTION': 'Sistema de gestión de inventario para productos y ventas',
+    'DESCRIPTION': 'Sistema de gestión de inventario para productos y ventas con optimización de imágenes y control de stock',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
+        'filter': True,
+        'showExtensions': True,
+        'showCommonExtensions': True,
+        'docExpansion': 'none',
+        'defaultModelsExpandDepth': 2,
+        'defaultModelExpandDepth': 2,
+    },
+    'REDOC_UI_SETTINGS': {
+        'hideHostname': True,
+        'hideDownloadButton': False,
+        'expandResponses': '200,201',
+        'hideLoading': True,
+    },
+    'ENUM_NAME_OVERRIDES': {
+        'GenderEnum': ['ProductVariant.gender'],
+        'MovementTypeEnum': ['MovementInventory.movement_type'],
+        'SaleStatusEnum': ['Sale.status'],
+    },
+    'TAGS': [
+        {
+            'name': 'Authentication',
+            'description': 'Autenticación JWT y gestión de tokens'
+        },
+        {
+            'name': 'Users',
+            'description': 'Gestión de usuarios y grupos del sistema'
+        },
+        {
+            'name': 'Sales',
+            'description': 'Gestión de ventas y confirmación de pedidos'
+        },
+        {
+            'name': 'Products',
+            'description': 'Catálogo de productos y variantes con control de stock'
+        },
+        {
+            'name': 'Images',
+            'description': 'Gestión de imágenes de productos con optimización automática'
+        },
+        {
+            'name': 'Inventory',
+            'description': 'Movimientos de inventario y historial completo'
+        },
+    ],
 }
 
 # Email backend for development (console)
