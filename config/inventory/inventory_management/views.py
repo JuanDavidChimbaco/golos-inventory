@@ -1,8 +1,7 @@
 """
 Views para gestión de inventario
 """
-from django.db.models import Window, F
-from django.db.models.base import Coalesce
+from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,6 +14,7 @@ from .serializers import (
     InventorySnapshotSerializer,
 )
 
+@extend_schema(tags=['Inventory'])
 class MovementInventoryViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet para consulta de movimientos de inventario (SOLO LECTURA)
@@ -34,6 +34,7 @@ class MovementInventoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
 
 
+@extend_schema(tags=['InventoryHistory'])
 class InventoryHistoryViewSet(viewsets.ModelViewSet):
     """
     ViewSet para historial de inventario (solo lectura)
@@ -74,14 +75,14 @@ class InventoryHistoryViewSet(viewsets.ModelViewSet):
         return super().list(request, *args, **kwargs)
 
 
+@extend_schema(tags=['InventoryReportDaily'])
 class InventoryReportDailyViewSet(viewsets.ViewSet):
     """
-    Reporte diario de inventario
+    Reporte diario de inventario 
     (Solo Admin y Managers)
     """
-
     permission_classes = [permissions.IsAuthenticated]
-
+    
     def list(self, request, *args, **kwargs):
         start = request.query_params.get("start")
         end = request.query_params.get("end")
@@ -91,12 +92,12 @@ class InventoryReportDailyViewSet(viewsets.ViewSet):
         return Response(serializer.data)
 
 
+@extend_schema(tags=['InventorySnapshots'])
 class InventorySnapshotViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Consulta de snapshots mensuales de inventario
     (Solo Admin y Managers)
     """
-
     queryset = InventorySnapshot.objects.select_related(
         "variant",
         "variant__product"
@@ -104,6 +105,9 @@ class InventorySnapshotViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = InventorySnapshotSerializer
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
+    
+    # Tags para documentación Swagger
+    tags = ['Inventory']
 
     def get_queryset(self):
         """
@@ -128,6 +132,7 @@ class InventorySnapshotViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
 
+@extend_schema(tags=['InventoryCloseMonth'])
 class InventoryCloseMonthView(APIView):
     """
     Cierre mensual de inventario
@@ -148,6 +153,7 @@ class InventoryCloseMonthView(APIView):
         return Response({"status": "month closed"})
 
 
+@extend_schema(tags=['InventoryAdjustments'])
 class AdjustmentViewSet(viewsets.ModelViewSet):
     """
     ViewSet para ajustes manuales de inventario (CONTROLADO)
@@ -159,6 +165,9 @@ class AdjustmentViewSet(viewsets.ModelViewSet):
     """
     serializer_class = MovementInventorySerializer
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
+    
+    # Tags para documentación Swagger
+    tags = ['Inventory']
 
     def get_queryset(self):
         """Solo mostrar movimientos de tipo ajuste"""

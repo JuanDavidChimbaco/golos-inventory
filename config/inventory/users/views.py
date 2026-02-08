@@ -9,27 +9,38 @@ from .serializers import (
     UserManagementSerializer,
     GroupSerializer,
 )
+from drf_spectacular.utils import extend_schema
 
-
+@extend_schema(tags=['Users'])
 class UserViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de usuarios
     
-    - Admin: CRUD completo
-    - Otros: Solo lectura
+    - Lectura: Usuarios autenticados
+    - Creación: Usuarios con permiso add_user
+    - Actualización: Usuarios con permiso change_user
+    - Eliminación: Usuarios con permiso delete_user
     """
     queryset = User.objects.all()
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
-
+    
     def get_serializer_class(self):
-        if self.action == "create":
+        if self.action == 'create':
             return UserCreateSerializer
-        return UserManagementSerializer
+        elif self.request.user.is_staff:
+            return UserManagementSerializer  # Campos administrativos para staff
+        return UserSerializer  # Campos básicos para usuarios normales
 
 
+@extend_schema(tags=['Groups'])
 class GroupViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de grupos
+    
+    - Lectura: Usuarios autenticados
+    - Creación: Usuarios con permiso add_group
+    - Actualización: Usuarios con permiso change_group
+    - Eliminación: Usuarios con permiso delete_group
     """
     queryset = Group.objects.all()
     serializer_class = GroupSerializer

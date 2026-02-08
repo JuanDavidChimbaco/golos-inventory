@@ -7,54 +7,6 @@ Información organizada para Swagger/ReDoc
 # API METADATA
 # ============================================================================
 
-API_INFO = {
-    'title': 'Golos Inventory API',
-    'description': (
-        'Sistema de gestión de inventario para productos y ventas con '
-        'optimización de imágenes y control de stock'
-    ),
-    'version': '1.0.0',
-    'contact': {
-        'name': 'Golos Inventory Team',
-        'email': 'support@golos-inventory.com',
-    },
-    'license': {
-        'name': 'MIT License',
-        'url': 'https://opensource.org/licenses/MIT',
-    }
-}
-
-# ============================================================================
-# TAGS ORGANIZADAS
-# ============================================================================
-
-API_TAGS = [
-    {
-        'name': 'Authentication',
-        'description': 'Autenticación JWT y gestión de tokens de acceso'
-    },
-    {
-        'name': 'Users',
-        'description': 'Gestión de usuarios y grupos del sistema'
-    },
-    {
-        'name': 'Sales',
-        'description': 'Gestión de ventas y confirmación de pedidos'
-    },
-    {
-        'name': 'Products',
-        'description': 'Catálogo de productos y variantes con control de stock'
-    },
-    {
-        'name': 'Images',
-        'description': 'Gestión de imágenes de productos con optimización automática'
-    },
-    {
-        'name': 'Inventory',
-        'description': 'Movimientos de inventario y historial completo'
-    },
-]
-
 # ============================================================================
 # ENDPOINTS DESCRIPTIONS
 # ============================================================================

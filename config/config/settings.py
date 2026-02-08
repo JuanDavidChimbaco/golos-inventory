@@ -162,6 +162,8 @@ SIMPLE_JWT = {
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
+    'PREPROCESSING_HOOKS': [],
+    'POSTPROCESSING_HOOKS': ['config.urls.postprocess_jwt_tags'],
 }
 
 SPECTACULAR_SETTINGS = {
@@ -202,21 +204,85 @@ SPECTACULAR_SETTINGS = {
             'description': 'Gestión de usuarios y grupos del sistema'
         },
         {
+            'name': 'Groups',
+            'description': 'Gestión de grupos con permisos'
+        },
+        {
             'name': 'Sales',
             'description': 'Gestión de ventas y confirmación de pedidos'
+        },
+        {
+            'name': 'SalesReturns',
+            'description': 'Gestión de devoluciones de ventas'
+        },
+        {
+            'name': 'SalesDetails',
+            'description': 'Gestión de detalles de ventas'
         },
         {
             'name': 'Products',
             'description': 'Catálogo de productos y variantes con control de stock'
         },
         {
-            'name': 'Images',
-            'description': 'Gestión de imágenes de productos con optimización automática'
+            'name': 'ProductsVariants',
+            'description': 'Variantes de productos (colores, tallas, etc.)'
+        },
+        {
+            'name': 'ProductsImages',
+            'description': 'Imágenes de productos con metadatos '
         },
         {
             'name': 'Inventory',
             'description': 'Movimientos de inventario y historial completo'
         },
+        {
+            'name': 'InventoryHistory',
+            'description': 'Historial de inventario (solo lectura)'
+        },
+        {
+            'name': 'InventoryReportDaily',
+            'description': 'Reporte diario de inventario (solo lectura)'
+        },
+        {
+            'name': 'InventorySnapshots',
+            'description': 'Snapshots mensuales de inventario (solo lectura)'
+        },
+        {
+            'name': 'InventoryCloseMonth',
+            'description': 'Cierre mensual de inventario'
+        },
+        {
+            'name': 'InventoryAdjustments',
+            'description': 'Ajustes manuales de inventario (controlado)'
+        },
+        {
+            'name': 'Batch',
+            'description': 'Operaciones masivas'
+        },
+        {
+            'name': 'Suppliers',
+            'description': 'Gestión de proveedores'
+        },
+        {
+            'name': 'SuppliersReturns',
+            'description': 'Gestión de devoluciones a proveedores'
+        },
+        {
+            'name': 'Dashboard',
+            'description': 'Dashboard de estadísticas y métricas'
+        },
+        {
+            'name': 'Export',
+            'description': 'Exportaciones de datos'
+        },
+        {
+            'name': 'Notifications',
+            'description': 'Gestión de notificaciones (solo lectura)'
+        },
+        {
+            'name': 'Purchase',
+            'description': 'Gestión de compras'
+        }
     ],
 }
 

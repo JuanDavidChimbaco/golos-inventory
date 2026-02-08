@@ -26,56 +26,145 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
     SpectacularRedocView,
 )
-from inventory import views
-from inventory.views_home import HomeView
-from inventory.views import InventoryCloseMonthView
+from inventory import views, views_home
+from drf_spectacular.utils import extend_schema
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    """
+    View para obtener el token de acceso usando las credenciales del usuario con extend_schema.
+    """
+    @extend_schema(
+        tags=['Authentication'],
+        summary='Obtener token de acceso',
+        description='Endpoint para obtener un par de tokens (access y refresh) mediante credenciales de usuario.'
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """
+    View para renovar el token de acceso usando el token de refresh con extend_schema.
+    """
+    @extend_schema(
+        tags=['Authentication'],
+        summary='Renovar token de acceso',
+        description='Endpoint para renovar el token de acceso usando el token de refresh.'
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
 router = routers.DefaultRouter()
-router.register(r"users", views.UserViewSet, basename="users")
-router.register(r"groups", views.GroupViewSet, basename="groups")
-router.register(r"dashboard", views.DashboardViewSet, basename="dashboard")
-router.register(r"sales", views.SaleViewSet, basename="sales")
-router.register(r"sale-details", views.SaleDetailViewSet, basename="sale-details")
-router.register(r"sale-returns", views.SaleReturnViewSet, basename="sale-returns")
-router.register(r"purchases", views.PurchaseViewSet, basename="purchases")
-router.register(r"products", views.ProductViewSet, basename="products")
 router.register(
-    r"product-variants", views.ProductVariantViewSet, basename="product-variants"
-)
-router.register(r"product-images", views.ProductImageViewSet, basename="product-images")
-router.register(
-    r"movement-inventory", views.MovementInventoryViewSet, basename="movement-inventory"
+    r"users", 
+    views.UserViewSet, 
+    basename="users"
 )
 router.register(
-    r"inventory-history", views.InventoryHistoryViewSet, basename="inventory-history"
+    r"groups", 
+    views.GroupViewSet, 
+    basename="groups"
 )
 router.register(
-    r"inventory-report-daily", views.InventoryReportDailyViewSet, basename="inventory-report-daily"
+    r"dashboard", 
+    views.DashboardViewSet, 
+    basename="dashboard"
+)
+router.register(
+    r"export", 
+    views.ExportViewSet,
+    basename="export"
+)
+router.register(
+    r"batch", 
+    views.BatchOperationsViewSet, 
+    basename="batch"
+)
+router.register(
+    r"notifications", 
+    views.NotificationViewSet, 
+    basename="notifications"
+)
+router.register(
+    r"sales", 
+    views.SaleViewSet, 
+    basename="sales"
+)
+router.register(
+    r"sale-details", 
+    views.SaleDetailViewSet, 
+    basename="sale-details"
+)
+router.register(
+    r"sale-returns", 
+    views.SaleReturnViewSet, 
+    basename="sale-returns"
+)
+router.register(
+    r"purchases", 
+    views.PurchaseViewSet, 
+    basename="purchases"
+)
+router.register(
+    r"products", 
+    views.ProductViewSet, 
+    basename="products"
+)
+router.register(
+    r"product-variants", 
+    views.ProductVariantViewSet, 
+    basename="product-variants"
+)
+router.register(
+    r"product-images", 
+    views.ProductImageViewSet, 
+    basename="product-images"
+)
+router.register(
+    r"movement-inventory", 
+    views.MovementInventoryViewSet, 
+    basename="movement-inventory"
+)
+router.register(
+    r"inventory-history", 
+    views.InventoryHistoryViewSet, 
+    basename="inventory-history"
+)
+router.register(
+    r"inventory-report-daily",
+    views.InventoryReportDailyViewSet,
+    basename="inventory-report-daily",
 )
 # router.register(r"audit-logs", views.AuditLogViewSet, basename="audit-logs")
 router.register(
-    r"inventory-snapshots", views.InventorySnapshotViewSet, basename="inventory-snapshot"
+    r"inventory-snapshots",
+    views.InventorySnapshotViewSet,
+    basename="inventory-snapshot",
 )
 router.register(
-    r"inventory-adjustments", views.AdjustmentViewSet, basename="inventory-adjustment"
+    r"inventory-adjustments", 
+    views.AdjustmentViewSet, 
+    basename="inventory-adjustment"
 )
 router.register(
-    r"suppliers", views.SupplierViewSet, basename="suppliers"
-)
+    r"suppliers", 
+    views.SupplierViewSet, 
+    basename="suppliers")
 router.register(
-    r"supplier-returns", views.SupplierReturnViewSet, basename="supplier-returns"
+    r"supplier-returns", 
+    views.SupplierReturnViewSet, 
+    basename="supplier-returns"
 )
 
 urlpatterns = [
-    path("", HomeView.as_view(), name="home"),
+    path("", views_home.HomeView.as_view(), name="home"),
     path("admin/", admin.site.urls),
-    path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     # JWT Authentication
-    path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
-    path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+    path("api/token/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     # API endpoints
     path("api/", include(router.urls)),
-    path("inventory/close-month/", InventoryCloseMonthView.as_view()),
+    path("inventory/close-month/", views.InventoryCloseMonthView.as_view()),
     # API Documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
@@ -83,7 +172,11 @@ urlpatterns = [
         SpectacularSwaggerView.as_view(url_name="schema"),
         name="swagger-ui",
     ),
-    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path(
+        "api/redoc/", 
+        SpectacularRedocView.as_view(url_name="schema"), 
+        name="redoc"
+    ),
 ]
 
 if settings.DEBUG:

@@ -1,6 +1,7 @@
 """
     Views para la gestión de compras
 """
+from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -22,14 +23,24 @@ from ..core.services import (
     daily_inventory_summary
 )
 
-
+@extend_schema(tags=['Purchase'])
 class PurchaseViewSet(viewsets.ModelViewSet):
-    """ViewSet simplificado para gestionar compras"""
+    """
+    ViewSet para gestión de compras
+    
+    - Lectura: Usuarios autenticados con permiso view_movement_inventory
+    - Creación: Usuarios autenticados con permiso add_movement_inventory
+    - Actualización: Usuarios autenticados con permiso change_movement_inventory
+    - Eliminación: Usuarios autenticados con permiso delete_movement_inventory
+    """
     queryset = MovementInventory.objects.filter(
         movement_type=MovementInventory.MovementType.PURCHASE
     ).select_related('variant', 'variant__product', 'supplier')
     serializer_class = PurchaseSerializer
     permission_classes = [IsAuthenticated, permissions.DjangoModelPermissions]
+    filterset_fields = ['supplier', 'variant', 'created_at']
+    search_fields = ['supplier__name', 'variant__product__name', 'observation']
+    ordering = ['-created_at']
     
     def get_serializer_class(self):
         if self.action == 'create':

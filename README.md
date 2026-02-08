@@ -261,28 +261,163 @@ customer = ECommerceCustomer.create_customer("cliente1", "email@tienda.com", "pa
 
 ---
 
+## 🆕 **Nuevas Funcionalidades (v1.0.0)**
+
+### 📊 **Dashboard Completo**
+- **Vista General**: Estadísticas en tiempo real de ventas, compras, inventario
+- **Stock Bajo**: Alertas automáticas con niveles de urgencia
+- **Gráficos**: Datos para visualizaciones de ventas y tendencias
+- **Top Productos**: Productos más vendidos por cantidad y revenue
+- **Rendimiento Proveedores**: Análisis de actividad de proveedores
+
+**Endpoints:**
+```bash
+GET /api/dashboard/overview/              # Estadísticas generales
+GET /api/dashboard/low_stock/             # Alertas stock bajo
+GET /api/dashboard/sales_chart/?days=30   # Gráfico de ventas
+GET /api/dashboard/top_products/          # Top productos
+```
+
+### 📤 **Exportación Avanzada**
+- **Múltiples formatos**: CSV y Excel
+- **Filtros personalizados**: Por fechas, estado, proveedor
+- **Reportes completos**: Ventas, compras, inventario, proveedores
+
+**Endpoints:**
+```bash
+GET /api/export/sales/?format=excel&start_date=2024-01-01
+GET /api/export/inventory/?format=csv&include_zero=false
+GET /api/export/suppliers_report/?days=90
+```
+
+### ⚡ **Operaciones Batch (Masivas)**
+- **Actualización de precios**: Múltiples productos simultáneamente
+- **Gestión de stock**: Actualizar stock mínimo masivamente
+- **Creación masiva**: Productos con variantas en batch
+- **Compras masivas**: Múltiples proveedores y productos
+
+**Endpoints:**
+```bash
+POST /api/batch/update_prices/           # Actualizar precios
+POST /api/batch/create_products_batch/   # Crear productos
+POST /api/batch/bulk_purchase/           # Compras masivas
+```
+
+### 🔔 **Sistema de Notificaciones Inteligente**
+- **Alertas de stock**: Críticas, advertencias, informativas
+- **Resumen diario**: Actividades del día y comparativas
+- **Recomendaciones**: Sugerencias de proveedores basadas en stock
+- **Detección de anomalías**: Movimientos inusuales o patrones extraños
+- **Métricas de rendimiento**: KPIs de inventario
+
+**Endpoints:**
+```bash
+GET /api/notifications/low_stock_alerts/     # Alertas stock
+GET /api/notifications/daily_summary/        # Resumen diario
+GET /api/notifications/movement_anomalies/  # Anomalías
+```
+
+### 🔍 **Búsqueda y Filtros Avanzados**
+- **Búsqueda full-text**: En productos, ventas, proveedores
+- **Paginación global**: 20 elementos por página
+- **Filtros exactos**: Por campos específicos
+- **Ordenamiento personalizado**: Múltiples criterios
+
+**Ejemplos:**
+```bash
+GET /api/products/?search=camisa&brand=Nike&active=true
+GET /api/sales/?status=completed&ordering=-created_at
+GET /api/purchases/?supplier=1&start_date=2024-01-01
+```
+
+---
+
+## 📚 **Documentación Completa Actualizada**
+
+### 📖 **API Reference Completa**
+- **[Documentación Detallada](docs/API.md)** - Guía completa de todos los endpoints
+- **[Swagger UI](http://localhost:8000/api/docs/)** - Documentación interactiva
+- **[ReDoc](http://localhost:8000/api/redoc/)** - Documentación alternativa
+
+### 🏗️ **Arquitectura Mejorada**
+```
+config/inventory/
+├── dashboard/           # 📊 Estadísticas y reportes
+├── export/             # 📤 Exportación CSV/Excel
+├── batch/              # ⚡ Operaciones masivas
+├── notifications/      # 🔔 Sistema de alertas
+├── purchase/           # 🛒 Gestión de compras
+├── sales/              # 🛍️ Ventas y devoluciones
+├── suppliers/          # 👥 Proveedores
+├── products/           # 📦 Catálogo de productos
+└── core/               # 🔧 Servicios centralizados
+```
+
+---
+
 ## API Endpoints Principales
 
-### Autenticación:
+### 🔐 **Autenticación:**
 - `POST /api/token/` - Obtener token JWT
 - `POST /api/token/refresh/` - Refrescar token
 
-### Gestión de Usuarios:
+### 👥 **Gestión de Usuarios:**
 - `GET/POST /api/users/` - Listar/Crear usuarios (Managers)
 - `GET/POST /api/groups/` - Listar/Crear grupos (Managers)
 
-### Ventas:
-- `GET/POST /api/sales/` - Listar/Crear ventas
+### 📦 **Productos y Catálogo:**
+- `GET/POST /api/products/` - Listar/Crear productos (con búsqueda y filtros)
+- `GET/POST /api/product-variants/` - Variantas (con búsqueda avanzada)
+- `GET/POST /api/product-images/` - Imágenes de productos
+
+### 🛍️ **Ventas y Devoluciones:**
+- `GET/POST /api/sales/` - Listar/Crear ventas (con búsqueda y filtros)
 - `POST /api/sales/{id}/confirm/` - Confirmar ventas
+- `GET/POST /api/sale-details/` - Detalles de venta
+- `GET/POST /api/sale-returns/` - Devoluciones de clientes
 
-### Productos:
-- `GET/POST /api/products/` - Listar/Crear productos
-- `GET/POST /api/product-variants/` - Variantes
-- `GET/POST /api/product-images/` - Imágenes
+### 🛒 **Compras y Proveedores:**
+- `GET/POST /api/purchases/` - Listar/Crear compras (con filtros)
+- `POST /api/purchases/bulk_purchase/` - Compras masivas
+- `GET/POST /api/suppliers/` - Proveedores
+- `GET/POST /api/supplier-returns/` - Devoluciones a proveedores
 
-### Inventario:
+### 📊 **Dashboard y Estadísticas:**
+- `GET /api/dashboard/overview/` - Vista general con KPIs
+- `GET /api/dashboard/low_stock/` - Alertas de stock bajo
+- `GET /api/dashboard/sales_chart/` - Gráficos de ventas
+- `GET /api/dashboard/top_products/` - Productos más vendidos
+- `GET /api/dashboard/recent_movements/` - Movimientos recientes
+- `GET /api/dashboard/supplier_performance/` - Rendimiento proveedores
+
+### 📤 **Exportación de Datos:**
+- `GET /api/export/sales/` - Exportar ventas (CSV/Excel)
+- `GET /api/export/purchases/` - Exportar compras
+- `GET /api/export/inventory/` - Exportar inventario actual
+- `GET /api/export/movements/` - Exportar movimientos
+- `GET /api/export/suppliers_report/` - Reporte de proveedores
+
+### ⚡ **Operaciones Batch (Masivas):**
+- `POST /api/batch/update_prices/` - Actualizar precios masivamente
+- `POST /api/batch/update_stock_minimum/` - Actualizar stock mínimo
+- `POST /api/batch/create_products_batch/` - Crear productos masivamente
+- `POST /api/batch/bulk_purchase/` - Compras masivas
+- `POST /api/batch/bulk_adjustments/` - Ajustes masivos
+- `POST /api/batch/toggle_products_status/` - Activar/desactivar productos
+
+### 🔔 **Notificaciones y Alertas:**
+- `GET /api/notifications/low_stock_alerts/` - Alertas de stock bajo
+- `GET /api/notifications/daily_summary/` - Resumen diario
+- `GET /api/notifications/supplier_recommendations/` - Recomendaciones
+- `GET /api/notifications/movement_anomalies/` - Detección de anomalías
+- `GET /api/notifications/performance_metrics/` - Métricas de rendimiento
+
+### 📋 **Inventario y Movimientos:**
 - `GET/POST /api/movement-inventory/` - Movimientos de stock
 - `GET /api/inventory-history/` - Historial completo
+- `GET/POST /api/inventory-adjustments/` - Ajustes de inventario
+- `GET /api/inventory-report-daily/` - Reportes diarios
+- `GET /api/inventory-snapshots/` - Snapshots de inventario
 
 ---
 

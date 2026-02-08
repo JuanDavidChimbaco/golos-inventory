@@ -1,6 +1,7 @@
 """
 Views para gestión de productos
 """
+from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets, permissions
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from ..models import Product, ProductVariant, ProductImage
@@ -11,7 +12,7 @@ from .serializers import (
     ProductImageSerializer,
 )
 
-
+@extend_schema(tags=['Products'])
 class ProductViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de productos
@@ -28,13 +29,14 @@ class ProductViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'brand', 'description']
     ordering_fields = ['name', 'created_at', 'updated_at']
     ordering = ['name']
-
+    
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:
             return ProductReadSerializer
         return ProductSerializer
 
 
+@extend_schema(tags=['ProductsVariants'])
 class ProductVariantViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de variantas de productos
@@ -48,8 +50,9 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
     search_fields = ['product__name', 'product__brand', 'color', 'size']
     ordering_fields = ['price', 'cost', 'created_at', 'product__name']
     ordering = ['product__name', 'color', 'size']
+    
 
-
+@extend_schema(tags=['ProductsImages'])
 class ProductImageViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de imágenes de productos

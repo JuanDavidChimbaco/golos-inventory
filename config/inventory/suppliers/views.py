@@ -2,6 +2,7 @@
 Views para gestión de proveedores
 """
 from rest_framework import viewsets, permissions, status
+from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.db.models import Avg, Max, Count, Sum
@@ -19,6 +20,7 @@ from .serializers import (
 )
 
 
+@extend_schema(tags=['Suppliers'])
 class SupplierViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de proveedores
@@ -86,6 +88,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(tags=['SuppliersReturns'])
 class SupplierReturnViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de devoluciones a proveedores

@@ -3,6 +3,7 @@ Views para gestión de ventas
 """
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
+from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from django.core.exceptions import ValidationError
@@ -18,7 +19,7 @@ from .serializers import (
     SaleReturnSerializer,
 )
 
-
+@extend_schema(tags=['Sales'])
 class SaleViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de ventas
@@ -62,6 +63,7 @@ class SaleViewSet(viewsets.ModelViewSet):
             raise DRFValidationError(str(e))
 
 
+@extend_schema(tags=['SalesReturns'])
 class SaleReturnViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de devoluciones de ventas
@@ -220,6 +222,7 @@ class SaleReturnViewSet(viewsets.ModelViewSet):
             raise DRFValidationError(str(e))
 
 
+@extend_schema(tags=['SalesDetails'])
 class SaleDetailViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestión de detalles de ventas

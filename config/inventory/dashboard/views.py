@@ -8,6 +8,7 @@ from django.db.models import Sum, Count, Q, F, DecimalField
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from datetime import datetime, timedelta
+from drf_spectacular.utils import extend_schema
 from ..models import (
     ProductVariant, MovementInventory, Sale, Supplier, 
     InventorySnapshot, Product
@@ -21,6 +22,10 @@ class DashboardViewSet(viewsets.GenericViewSet):
     """
     permission_classes = [permissions.IsAuthenticated]
     
+    # Tags para documentación Swagger
+    tags = ['Dashboard']
+    
+    @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
     def overview(self, request):
         """Vista general del dashboard"""
@@ -111,6 +116,7 @@ class DashboardViewSet(viewsets.GenericViewSet):
             }
         })
     
+    @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
     def low_stock(self, request):
         """Productos con stock bajo"""
@@ -150,6 +156,7 @@ class DashboardViewSet(viewsets.GenericViewSet):
             'products': data
         })
     
+    @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
     def recent_movements(self, request):
         """Movimientos recientes de inventario"""
@@ -186,6 +193,7 @@ class DashboardViewSet(viewsets.GenericViewSet):
             'movements': data
         })
     
+    @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
     def sales_chart(self, request):
         """Datos para gráfico de ventas"""
@@ -231,6 +239,7 @@ class DashboardViewSet(viewsets.GenericViewSet):
             }
         })
     
+    @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
     def top_products(self, request):
         """Productos más vendidos"""
@@ -271,6 +280,7 @@ class DashboardViewSet(viewsets.GenericViewSet):
             'period': period
         })
     
+    @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
     def supplier_performance(self, request):
         """Rendimiento de proveedores"""
