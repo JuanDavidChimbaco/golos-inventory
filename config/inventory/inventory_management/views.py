@@ -7,7 +7,7 @@ from rest_framework import viewsets, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from ..models import MovementInventory, InventorySnapshot
-from ..core.services import daily_inventory_summary
+from ..core.services import daily_inventory_summary, create_adjustment
 from .serializers import (
     MovementInventorySerializer,
     InventoryHistorySerializer,
@@ -15,21 +15,23 @@ from .serializers import (
     InventorySnapshotSerializer,
 )
 
-class MovementInventoryViewSet(viewsets.ModelViewSet):
+class MovementInventoryViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    ViewSet para gestión de movimientos de inventario
+    ViewSet para consulta de movimientos de inventario (SOLO LECTURA)
     
-    - Requiere permisos de inventario
+    - Solo permite consultar movimientos existentes
+    - NO permite crear movimientos manuales
+    - Los movimientos se crean a través de servicios específicos:
+      * Compras: create_purchase()
+      * Ventas: confirm_sale() (automático)
+      * Devoluciones: create_sale_return()
+      * Ajustes: AdjustmentViewSet (controlado)
     """
     queryset = MovementInventory.objects.all().select_related(
         'variant', 'variant__product'
     )
     serializer_class = MovementInventorySerializer
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
-
-    def perform_create(self, serializer):
-        """Registra usuario que crea el movimiento"""
-        serializer.save(created_by=self.request.user.username)
 
 
 class InventoryHistoryViewSet(viewsets.ModelViewSet):
@@ -144,3 +146,38 @@ class InventoryCloseMonthView(APIView):
         )
 
         return Response({"status": "month closed"})
+
+
+class AdjustmentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para ajustes manuales de inventario (CONTROLADO)
+    
+    - Permite crear ajustes manuales con motivo obligatorio
+    - Solo usuarios con permisos especiales pueden usarlo
+    - Genera movimientos tipo 'adjustment'
+    - Auditoría completa de cada ajuste
+    """
+    serializer_class = MovementInventorySerializer
+    permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
+
+    def get_queryset(self):
+        """Solo mostrar movimientos de tipo ajuste"""
+        return MovementInventory.objects.filter(
+            movement_type=MovementInventory.MovementType.ADJUSTMENT
+        ).select_related('variant', 'variant__product')
+
+    def perform_create(self, serializer):
+        """Crear ajuste usando el servicio específico"""
+        
+        
+        variant_id = serializer.validated_data['variant'].id
+        quantity = serializer.validated_data['quantity']
+        reason = serializer.validated_data.get('observation', '')
+        
+        # Usar el servicio para crear el ajuste
+        create_adjustment(
+            variant_id=variant_id,
+            quantity=quantity,
+            reason=reason,
+            user=self.request.user
+        )

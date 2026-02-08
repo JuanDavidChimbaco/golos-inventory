@@ -53,6 +53,9 @@ router.register(
 router.register(
     r"inventory-snapshots", views.InventorySnapshotViewSet, basename="inventory-snapshot"
 )
+router.register(
+    r"inventory-adjustments", views.AdjustmentViewSet, basename="inventory-adjustment"
+)
 
 urlpatterns = [
     path("", HomeView.as_view(), name="home"),

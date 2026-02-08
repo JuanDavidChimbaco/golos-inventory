@@ -11,6 +11,7 @@ from .inventory_management.views import (
     InventoryReportDailyViewSet,
     InventorySnapshotViewSet,
     InventoryCloseMonthView,
+    AdjustmentViewSet,
 )
 
 # Exportar todos los ViewSets para que estén disponibles
@@ -31,4 +32,5 @@ __all__ = [
     "InventoryReportDailyViewSet",
     "InventorySnapshotViewSet",
     "InventoryCloseMonthView",
+    "AdjustmentViewSet",
 ]
