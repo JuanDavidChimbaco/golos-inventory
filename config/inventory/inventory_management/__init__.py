@@ -2,10 +2,11 @@
 Módulo de gestión de inventario
 """
 
-from .views import MovementInventoryViewSet, InventoryHistoryViewSet
+from .views import MovementInventoryViewSet, InventoryHistoryViewSet, InventoryReportDailyViewSet, InventorySnapshotViewSet, InventoryCloseMonthView, AdjustmentViewSet
 from .serializers import (
     MovementInventorySerializer,
     InventoryHistorySerializer,
+
 )
 
 __all__ = [
@@ -13,4 +14,8 @@ __all__ = [
     'InventoryHistoryViewSet',
     'MovementInventorySerializer',
     'InventoryHistorySerializer',
+    'InventoryReportDailyViewSet',
+    'InventorySnapshotViewSet',
+    'InventoryCloseMonthView',
+    'AdjustmentViewSet',
 ]

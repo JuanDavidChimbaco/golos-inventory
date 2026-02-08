@@ -7,7 +7,7 @@ from django.db.models import Sum, Q, F
 from django.utils.timezone import now
 from datetime import date
 from django.db.models.functions import TruncDate
-from ..models import MovementInventory, Sale, ProductImage, AuditLog, InventorySnapshot, ProductVariant
+from ..models import MovementInventory, Sale, ProductImage, AuditLog, InventorySnapshot, ProductVariant, Supplier
 
 
 
@@ -221,7 +221,7 @@ def close_inventory_month(year: int, month: int) -> None:
             )
 
 
-def create_purchase(variant_id: int, quantity: int, unit_cost: float, supplier_name: str = "", user=None) -> MovementInventory:
+def create_purchase(variant_id: int, quantity: int, unit_cost: float, supplier_id: int = None, supplier_name: str = "", user=None) -> MovementInventory:
     """
     Crear movimiento de compra (entrada de inventario)
     
@@ -229,7 +229,8 @@ def create_purchase(variant_id: int, quantity: int, unit_cost: float, supplier_n
         variant_id: ID de la variante de producto
         quantity: Cantidad comprada (debe ser positiva)
         unit_cost: Costo unitario del producto
-        supplier_name: Nombre del proveedor (opcional)
+        supplier_id: ID del proveedor (opcional)
+        supplier_name: Nombre del proveedor (si no hay ID)
         user: Usuario que realiza la acción
     
     Returns:
@@ -250,6 +251,15 @@ def create_purchase(variant_id: int, quantity: int, unit_cost: float, supplier_n
     except ProductVariant.DoesNotExist:
         raise ValidationError("La variante de producto no existe")
     
+    # Obtener proveedor si se especificó ID
+    supplier = None
+    if supplier_id:
+        try:
+            supplier = Supplier.objects.get(id=supplier_id)
+            supplier_name = supplier.name
+        except Supplier.DoesNotExist:
+            raise ValidationError("El proveedor no existe")
+    
     with transaction.atomic():
         # Crear movimiento de compra
         movement = MovementInventory.objects.create(
@@ -257,8 +267,14 @@ def create_purchase(variant_id: int, quantity: int, unit_cost: float, supplier_n
             quantity=quantity,  # Positivo = entrada
             movement_type=MovementInventory.MovementType.PURCHASE,
             observation=f"Compra - Proveedor: {supplier_name}" if supplier_name else "Compra directa",
+            supplier=supplier,
             created_by=user.username if user else "system",
         )
+        
+        # Actualizar datos del proveedor si existe
+        if supplier:
+            supplier.last_purchase_date = now().date()
+            supplier.save()
         
         # Registrar en auditoría
         AuditLog.objects.create(
@@ -270,6 +286,7 @@ def create_purchase(variant_id: int, quantity: int, unit_cost: float, supplier_n
                 "variant_id": variant_id,
                 "quantity": quantity,
                 "unit_cost": float(unit_cost),
+                "supplier_id": supplier_id,
                 "supplier_name": supplier_name,
                 "product_name": variant.product.name,
             },
@@ -403,7 +420,7 @@ def create_sale_return(sale_id: int, items: list, reason: str, user=None) -> lis
         return movements_created
 
 
-def create_supplier_return(variant_id: int, quantity: int, reason: str, supplier_name: str = "", user=None) -> MovementInventory:
+def create_supplier_return(variant_id: int, quantity: int, reason: str, supplier_id: int = None, supplier_name: str = "", user=None) -> MovementInventory:
     """
     Crear devolución a proveedor (salida de inventario)
     
@@ -411,7 +428,8 @@ def create_supplier_return(variant_id: int, quantity: int, reason: str, supplier
         variant_id: ID de la variante de producto
         quantity: Cantidad a devolver (debe ser positiva)
         reason: Motivo de la devolución
-        supplier_name: Nombre del proveedor
+        supplier_id: ID del proveedor (opcional)
+        supplier_name: Nombre del proveedor (si no hay ID)
         user: Usuario que realiza la acción
     
     Returns:
@@ -432,6 +450,15 @@ def create_supplier_return(variant_id: int, quantity: int, reason: str, supplier
     except ProductVariant.DoesNotExist:
         raise ValidationError("La variante de producto no existe")
     
+    # Obtener proveedor si se especificó ID
+    supplier = None
+    if supplier_id:
+        try:
+            supplier = Supplier.objects.get(id=supplier_id)
+            supplier_name = supplier.name
+        except Supplier.DoesNotExist:
+            raise ValidationError("El proveedor no existe")
+    
     # Validar stock disponible
     current_stock = variant.stock
     if current_stock < quantity:
@@ -444,6 +471,7 @@ def create_supplier_return(variant_id: int, quantity: int, reason: str, supplier
             quantity=-quantity,  # Negativo = salida
             movement_type=MovementInventory.MovementType.RETURN,
             observation=f"Devolución proveedor {supplier_name} - {reason}" if supplier_name else f"Devolución proveedor - {reason}",
+            supplier=supplier,
             created_by=user.username if user else "system",
         )
         
@@ -457,6 +485,7 @@ def create_supplier_return(variant_id: int, quantity: int, reason: str, supplier
                 "variant_id": variant_id,
                 "quantity": quantity,
                 "reason": reason,
+                "supplier_id": supplier_id,
                 "supplier_name": supplier_name,
                 "product_name": variant.product.name,
                 "current_stock": current_stock,

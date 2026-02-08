@@ -4,6 +4,67 @@ from django.db.models import Sum
 # Create your models here.
 
 
+class Supplier(models.Model):
+    """Proveedor simple para negocio informal
+    
+    Attributes:
+        name (CharField): Nombre del proveedor
+        phone (CharField): Teléfono (opcional)
+        address (TextField): Dirección (opcional)
+        nit (CharField): NIT (opcional, para proveedores formales)
+        preferred_products (ManyToManyField): Productos que suele vender
+        average_price (DecimalField): Precio promedio de sus productos
+        last_purchase_date (DateField): Última fecha de compra
+        is_active (BooleanField): Sigue existiendo
+        created_at (DateTimeField): Fecha de creación
+        updated_at (DateTimeField): Fecha de actualización
+        created_by (CharField): Usuario que creó el proveedor
+    """
+    
+    name = models.CharField(max_length=100)
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    nit = models.CharField(max_length=20, blank=True, null=True)
+    
+    # Datos útiles para el negocio
+    preferred_products = models.ManyToManyField(
+        'Product', 
+        related_name='suppliers',
+        blank=True,
+        help_text="Productos que este proveedor suele vender"
+    )
+    average_price = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        help_text="Precio promedio de sus productos"
+    )
+    last_purchase_date = models.DateField(
+        null=True, 
+        blank=True,
+        help_text="Última fecha de compra"
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.CharField(max_length=50)
+
+    class Meta:
+        permissions = [
+            ("manage_suppliers", "Can manage suppliers"),
+        ]
+        ordering = ["-last_purchase_date", "name"]
+
+    def __str__(self):
+        return self.name
+
+    def get_total_purchases(self):
+        """Obtener total de compras a este proveedor"""
+        # Implementaremos cuando creemos el modelo Purchase
+        return 0
+
+
 class Product(models.Model):
     """Producto base
 
@@ -147,6 +208,7 @@ class MovementInventory(models.Model):
         movement_type (CharField): Tipo de movimiento (compra, venta, ajuste, devolución)
         quantity (PositiveIntegerField): Cantidad del movimiento
         observation (TextField): Observación del movimiento
+        supplier (ForeignKey): Proveedor (opcional, para compras y devoluciones)
         created_at (DateTimeField): Fecha de creación
         created_by (CharField): Usuario que creó el movimiento
     """
@@ -168,6 +230,14 @@ class MovementInventory(models.Model):
     )
     quantity = models.IntegerField()
     observation = models.TextField(blank=True, null=True)
+    supplier = models.ForeignKey(
+        Supplier, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name="movements",
+        help_text="Proveedor (para compras y devoluciones)"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.CharField(max_length=50)
 

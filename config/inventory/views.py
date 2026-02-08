@@ -4,8 +4,9 @@ Views principal - Importaciones desde módulos organizados
 
 from .users.views import UserViewSet, GroupViewSet
 from .sales.views import SaleViewSet, SaleDetailViewSet
+from .suppliers.views import SupplierViewSet
 from .products.views import ProductViewSet, ProductVariantViewSet, ProductImageViewSet
-from .inventory_management.views import (
+from .inventory_management import (
     MovementInventoryViewSet,
     InventoryHistoryViewSet,
     InventoryReportDailyViewSet,
@@ -33,4 +34,6 @@ __all__ = [
     "InventorySnapshotViewSet",
     "InventoryCloseMonthView",
     "AdjustmentViewSet",
+    # Suppliers
+    "SupplierViewSet",
 ]
