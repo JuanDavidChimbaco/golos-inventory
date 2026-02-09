@@ -364,7 +364,7 @@
                 <div class="feature-card fade-in-up">
                     <div class="feature-icon">⚡</div>
                     <h3>Alto Rendimiento</h3>
-                    <p>Optimizado con consultas eficientes y caching</p>
+                    <p>Optimizado con consultas eficientes</p>
                 </div>
             </div>
         </div>
@@ -410,308 +410,557 @@
             </div>
 
             <!-- Endpoints Table -->
-            <div id="endpoints" class="endpoints-table">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Método</th>
-                            <th>Endpoint</th>
-                            <th>Descripción</th>
-                            <th>Permisos</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Authentication -->
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/token/</span></td>
-                            <td>Obtener token JWT</td>
-                            <td>Público</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/token/refresh/</span></td>
-                            <td>Refrescar token JWT</td>
-                            <td>Público</td>
-                        </tr>
-                        
-                        <!-- Users Management -->
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/users/</span></td>
-                            <td>Listar usuarios</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/users/</span></td>
-                            <td>Crear usuario</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/users/{id}/</span></td>
-                            <td>Ver usuario</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-put">PUT</span></td>
-                            <td><span class="code">/api/users/{id}/</span></td>
-                            <td>Actualizar usuario</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-delete">DELETE</span></td>
-                            <td><span class="code">/api/users/{id}/</span></td>
-                            <td>Eliminar usuario</td>
-                            <td>Admin</td>
-                        </tr>
-                        
-                        <!-- Groups Management -->
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/groups/</span></td>
-                            <td>Listar grupos</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/groups/</span></td>
-                            <td>Crear grupo</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/groups/{id}/</span></td>
-                            <td>Ver grupo</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-put">PUT</span></td>
-                            <td><span class="code">/api/groups/{id}/</span></td>
-                            <td>Actualizar grupo</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-delete">DELETE</span></td>
-                            <td><span class="code">/api/groups/{id}/</span></td>
-                            <td>Eliminar grupo</td>
-                            <td>Admin</td>
-                        </tr>
-                        
-                        <!-- Products Management -->
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/products/</span></td>
-                            <td>Listar productos</td>
-                            <td>Autenticado</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/products/</span></td>
-                            <td>Crear producto</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/products/{id}/</span></td>
-                            <td>Ver producto</td>
-                            <td>Autenticado</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-put">PUT</span></td>
-                            <td><span class="code">/api/products/{id}/</span></td>
-                            <td>Actualizar producto</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-delete">DELETE</span></td>
-                            <td><span class="code">/api/products/{id}/</span></td>
-                            <td>Eliminar producto</td>
-                            <td>Admin</td>
-                        </tr>
-                        
-                        <!-- Product Variants -->
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/product-variants/</span></td>
-                            <td>Listar variantas</td>
-                            <td>Autenticado</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/product-variants/</span></td>
-                            <td>Crear varianta</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/product-variants/{id}/</span></td>
-                            <td>Ver varianta</td>
-                            <td>Autenticado</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-put">PUT</span></td>
-                            <td><span class="code">/api/product-variants/{id}/</span></td>
-                            <td>Actualizar varianta</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-delete">DELETE</span></td>
-                            <td><span class="code">/api/product-variants/{id}/</span></td>
-                            <td>Eliminar varianta</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        
-                        <!-- Product Images -->
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/product-images/</span></td>
-                            <td>Listar imágenes</td>
-                            <td>Autenticado</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/product-images/</span></td>
-                            <td>Subir imagen</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/product-images/{id}/</span></td>
-                            <td>Ver imagen</td>
-                            <td>Autenticado</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-put">PUT</span></td>
-                            <td><span class="code">/api/product-images/{id}/</span></td>
-                            <td>Actualizar imagen</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-delete">DELETE</span></td>
-                            <td><span class="code">/api/product-images/{id}/</span></td>
-                            <td>Eliminar imagen</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        
-                        <!-- Sales Management -->
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/sales/</span></td>
-                            <td>Listar ventas</td>
-                            <td>Ventas/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/sales/</span></td>
-                            <td>Crear venta</td>
-                            <td>Ventas/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/sales/{id}/</span></td>
-                            <td>Ver venta</td>
-                            <td>Ventas/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-put">PUT</span></td>
-                            <td><span class="code">/api/sales/{id}/</span></td>
-                            <td>Actualizar venta</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-delete">DELETE</span></td>
-                            <td><span class="code">/api/sales/{id}/</span></td>
-                            <td>Eliminar venta</td>
-                            <td>Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/sales/{id}/confirm/</span></td>
-                            <td>Confirmar venta</td>
-                            <td>Ventas con permiso especial</td>
-                        </tr>
-                        
-                        <!-- Sale Details -->
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/sale-details/</span></td>
-                            <td>Listar detalles de ventas</td>
-                            <td>Ventas/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/sale-details/</span></td>
-                            <td>Agregar detalle a venta</td>
-                            <td>Ventas/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/sale-details/{id}/</span></td>
-                            <td>Ver detalle de venta</td>
-                            <td>Ventas/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-put">PUT</span></td>
-                            <td><span class="code">/api/sale-details/{id}/</span></td>
-                            <td>Actualizar detalle de venta</td>
-                            <td>Ventas/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-delete">DELETE</span></td>
-                            <td><span class="code">/api/sale-details/{id}/</span></td>
-                            <td>Eliminar detalle de venta</td>
-                            <td>Ventas/Admin</td>
-                        </tr>
-                        
-                        <!-- Movement Inventory -->
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/movement-inventory/</span></td>
-                            <td>Listar movimientos</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-post">POST</span></td>
-                            <td><span class="code">/api/movement-inventory/</span></td>
-                            <td>Crear movimiento</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/movement-inventory/{id}/</span></td>
-                            <td>Ver movimiento</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-put">PUT</span></td>
-                            <td><span class="code">/api/movement-inventory/{id}/</span></td>
-                            <td>Actualizar movimiento</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-delete">DELETE</span></td>
-                            <td><span class="code">/api/movement-inventory/{id}/</span></td>
-                            <td>Eliminar movimiento</td>
-                            <td>Inventario/Admin</td>
-                        </tr>
-                        
-                        <!-- Inventory History -->
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/inventory-history/</span></td>
-                            <td>Historial completo de inventario</td>
-                            <td>Autenticado</td>
-                        </tr>
-                        <tr>
-                            <td><span class="method-badge method-get">GET</span></td>
-                            <td><span class="code">/api/inventory-history/{id}/</span></td>
-                            <td>Ver movimiento específico</td>
-                            <td>Autenticado</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div id="endpoints">
+                <!-- Authentication Section -->
+                <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem;">🔐 Autenticación</h3>
+                <div class="endpoints-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Método</th>
+                                <th>Endpoint</th>
+                                <th>Descripción</th>
+                                <th>Permisos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/token/</span></td>
+                                <td>Obtener token JWT</td>
+                                <td>Público</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/token/refresh/</span></td>
+                                <td>Refrescar token JWT</td>
+                                <td>Público</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Users & Groups Section -->
+                <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem;">👥 Usuarios y Grupos</h3>
+                <div class="endpoints-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Método</th>
+                                <th>Endpoint</th>
+                                <th>Descripción</th>
+                                <th>Permisos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/users/</span></td>
+                                <td>Listar usuarios</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/users/</span></td>
+                                <td>Crear usuario</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/users/{id}/</span></td>
+                                <td>Ver usuario</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/users/{id}/</span></td>
+                                <td>Actualizar usuario</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/users/{id}/</span></td>
+                                <td>Eliminar usuario</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/groups/</span></td>
+                                <td>Listar grupos</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/groups/</span></td>
+                                <td>Crear grupo</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/groups/{id}/</span></td>
+                                <td>Ver grupo</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/groups/{id}/</span></td>
+                                <td>Actualizar grupo</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/groups/{id}/</span></td>
+                                <td>Eliminar grupo</td>
+                                <td>Admin</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Products Section -->
+                <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem;">📦 Productos</h3>
+                <div class="endpoints-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Método</th>
+                                <th>Endpoint</th>
+                                <th>Descripción</th>
+                                <th>Permisos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/products/</span></td>
+                                <td>Listar productos</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/products/</span></td>
+                                <td>Crear producto</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/products/{id}/</span></td>
+                                <td>Ver producto</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/products/{id}/</span></td>
+                                <td>Actualizar producto</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/products/{id}/</span></td>
+                                <td>Eliminar producto</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/product-variants/</span></td>
+                                <td>Listar variantes</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/product-variants/</span></td>
+                                <td>Crear variante</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/product-variants/{id}/</span></td>
+                                <td>Ver variante</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/product-variants/{id}/</span></td>
+                                <td>Actualizar variante</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/product-variants/{id}/</span></td>
+                                <td>Eliminar variante</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/product-images/</span></td>
+                                <td>Listar imágenes</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/product-images/</span></td>
+                                <td>Subir imagen</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/product-images/{id}/</span></td>
+                                <td>Ver imagen</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/product-images/{id}/</span></td>
+                                <td>Actualizar imagen</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/product-images/{id}/</span></td>
+                                <td>Eliminar imagen</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Sales Section -->
+                <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem;">💰 Ventas y Compras</h3>
+                <div class="endpoints-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Método</th>
+                                <th>Endpoint</th>
+                                <th>Descripción</th>
+                                <th>Permisos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/sales/</span></td>
+                                <td>Listar ventas</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/sales/</span></td>
+                                <td>Crear venta</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/sales/{id}/</span></td>
+                                <td>Ver venta</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/sales/{id}/</span></td>
+                                <td>Actualizar venta</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/sales/{id}/</span></td>
+                                <td>Eliminar venta</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/sale-details/</span></td>
+                                <td>Listar detalles de ventas</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/sale-details/</span></td>
+                                <td>Agregar detalle a venta</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/sale-details/{id}/</span></td>
+                                <td>Ver detalle de venta</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/sale-details/{id}/</span></td>
+                                <td>Actualizar detalle de venta</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/sale-details/{id}/</span></td>
+                                <td>Eliminar detalle de venta</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/sale-returns/</span></td>
+                                <td>Listar devoluciones de ventas</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/sale-returns/</span></td>
+                                <td>Crear devolución de venta</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/sale-returns/{id}/</span></td>
+                                <td>Ver devolución de venta</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/sale-returns/{id}/</span></td>
+                                <td>Actualizar devolución de venta</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/sale-returns/{id}/</span></td>
+                                <td>Eliminar devolución de venta</td>
+                                <td>Ventas/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/purchases/</span></td>
+                                <td>Listar compras</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/purchases/</span></td>
+                                <td>Crear compra</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/purchases/{id}/</span></td>
+                                <td>Ver compra</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/purchases/{id}/</span></td>
+                                <td>Actualizar compra</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/purchases/{id}/</span></td>
+                                <td>Eliminar compra</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Inventory Section -->
+                <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem;">📊 Inventario</h3>
+                <div class="endpoints-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Método</th>
+                                <th>Endpoint</th>
+                                <th>Descripción</th>
+                                <th>Permisos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/movement-inventory/</span></td>
+                                <td>Listar movimientos de inventario</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/movement-inventory/{id}/</span></td>
+                                <td>Ver movimiento de inventario</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/inventory-history/</span></td>
+                                <td>Historial completo de inventario</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/inventory-history/{id}/</span></td>
+                                <td>Ver movimiento específico</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/inventory-report-daily/</span></td>
+                                <td>Reporte diario de inventario</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/inventory-snapshots/</span></td>
+                                <td>Snapshots mensuales de inventario</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/inventory-snapshots/{id}/</span></td>
+                                <td>Ver snapshot específico</td>
+                                <td>Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/inventory-adjustments/</span></td>
+                                <td>Crear ajuste de inventario</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/inventory-adjustments/{id}/</span></td>
+                                <td>Ver ajuste de inventario</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/inventory/close-month/</span></td>
+                                <td>Cierre mensual de inventario</td>
+                                <td>Admin</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Suppliers Section -->
+                <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem;">🏪 Proveedores</h3>
+                <div class="endpoints-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Método</th>
+                                <th>Endpoint</th>
+                                <th>Descripción</th>
+                                <th>Permisos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/suppliers/</span></td>
+                                <td>Listar proveedores</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/suppliers/</span></td>
+                                <td>Crear proveedor</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/suppliers/{id}/</span></td>
+                                <td>Ver proveedor</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/suppliers/{id}/</span></td>
+                                <td>Actualizar proveedor</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/suppliers/{id}/</span></td>
+                                <td>Eliminar proveedor</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/supplier-returns/</span></td>
+                                <td>Listar devoluciones a proveedores</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-post">POST</span></td>
+                                <td><span class="code">/api/supplier-returns/</span></td>
+                                <td>Crear devolución a proveedor</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/supplier-returns/{id}/</span></td>
+                                <td>Ver devolución a proveedor</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-put">PUT</span></td>
+                                <td><span class="code">/api/supplier-returns/{id}/</span></td>
+                                <td>Actualizar devolución a proveedor</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-delete">DELETE</span></td>
+                                <td><span class="code">/api/supplier-returns/{id}/</span></td>
+                                <td>Eliminar devolución a proveedor</td>
+                                <td>Inventario/Admin</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Operations Section -->
+                <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--primary-color); border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem;">⚙️ Operaciones y Reportes</h3>
+                <div class="endpoints-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Método</th>
+                                <th>Endpoint</th>
+                                <th>Descripción</th>
+                                <th>Permisos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/dashboard/</span></td>
+                                <td>Dashboard de estadísticas</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/dashboard/overview/</span></td>
+                                <td>Vista general del dashboard</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/export/</span></td>
+                                <td>Exportaciones de datos</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/batch/</span></td>
+                                <td>Operaciones masivas</td>
+                                <td>Autenticado</td>
+                            </tr>
+                            <tr>
+                                <td><span class="method-badge method-get">GET</span></td>
+                                <td><span class="code">/api/notifications/</span></td>
+                                <td>Gestión de notificaciones</td>
+                                <td>Autenticado</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </section>
