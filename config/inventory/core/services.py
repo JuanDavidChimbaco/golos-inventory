@@ -113,11 +113,11 @@ def daily_inventory_summary(start_date=None, end_date=None):
 
 def low_stock_variants():
     variants = ProductVariant.objects.annotate(
-        stock=Sum("movements__quantity")
+        current_stock=Sum("movements__quantity")
     )
 
     return variants.filter(
-        stock__lte=F("stock_minimum")
+        current_stock__lte=F("stock_minimum")
     )
 
 

@@ -132,12 +132,12 @@ class DashboardViewSet(viewsets.GenericViewSet):
         # Filtrar por umbral si se proporciona
         if threshold > 0:
             low_stock = low_stock.annotate(
-                stock=Coalesce(Sum('movements__quantity'), 0, output_field=DecimalField())
-            ).filter(stock__lte=threshold)
+                current_stock=Coalesce(Sum('movements__quantity'), 0, output_field=DecimalField())
+            ).filter(current_stock__lte=threshold)
         
         data = []
         for variant in low_stock:
-            current_stock = variant.stock
+            current_stock = variant.current_stock
             data.append({
                 'id': variant.id,
                 'product_name': variant.product.name,
