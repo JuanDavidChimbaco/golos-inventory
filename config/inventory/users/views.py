@@ -2,6 +2,8 @@
 Views para gestión de usuarios
 """
 from rest_framework import viewsets, permissions
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from django.contrib.auth.models import User, Group
 from .serializers import (
     UserSerializer,
@@ -30,6 +32,12 @@ class UserViewSet(viewsets.ModelViewSet):
         elif self.request.user.is_staff:
             return UserManagementSerializer  # Campos administrativos para staff
         return UserSerializer  # Campos básicos para usuarios normales
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def me(self, request):
+        """Endpoint para obtener información del usuario actual"""
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
 
 
 @extend_schema(tags=['Groups'])
