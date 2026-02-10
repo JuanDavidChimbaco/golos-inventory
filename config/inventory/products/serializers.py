@@ -24,7 +24,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
         
         try:
             # Validar imagen
-            ImageService.validate_image(value)
+            ImageService.validate_image_file(value)
             return value
         except Exception as e:
             raise serializers.ValidationError(str(e))
