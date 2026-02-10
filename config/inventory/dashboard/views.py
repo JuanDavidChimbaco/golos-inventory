@@ -13,7 +13,7 @@ from ..models import (
     ProductVariant, MovementInventory, Sale, Supplier, 
     InventorySnapshot, Product
 )
-from ..core.services import low_stock_variants, daily_inventory_summary
+from ..core.services import low_stock_variants
 
 
 class DashboardViewSet(viewsets.GenericViewSet):
@@ -21,9 +21,6 @@ class DashboardViewSet(viewsets.GenericViewSet):
     ViewSet para dashboard y estadísticas del sistema
     """
     permission_classes = [permissions.IsAuthenticated]
-    
-    # Tags para documentación Swagger
-    tags = ['Dashboard']
     
     @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
