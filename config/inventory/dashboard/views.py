@@ -1,17 +1,17 @@
 """
 Views para dashboard y estadísticas
 """
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Sum, Count, Q, F, DecimalField
+from django.db.models import Sum, Count, DecimalField
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from datetime import datetime, timedelta
+from datetime import timedelta
 from drf_spectacular.utils import extend_schema
 from ..models import (
     ProductVariant, MovementInventory, Sale, Supplier, 
-    InventorySnapshot, Product
+    Product
 )
 from ..core.services import low_stock_variants
 
