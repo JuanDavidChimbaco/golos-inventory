@@ -5,6 +5,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets, permissions
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from ..models import Product, ProductVariant, ProductImage
+from ..core.services import ImageService
 from .serializers import (
     ProductSerializer,
     ProductReadSerializer,

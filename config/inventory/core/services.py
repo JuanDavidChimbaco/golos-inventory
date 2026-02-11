@@ -7,6 +7,7 @@ from django.db.models import Sum, Q, F
 from django.utils.timezone import now
 from datetime import date
 from django.db.models.functions import TruncDate
+from PIL import Image, UnidentifiedImageError
 from ..models import MovementInventory, Sale, ProductImage, AuditLog, InventorySnapshot, ProductVariant, Supplier
 
 
@@ -522,14 +523,17 @@ class ImageService:
             )
         
         # Validar formato de imagen
+        # Abre la imagen en modo solo lectura para evitar modificaciones no intencionadas
         try:
-            img = Image.open(image_file)
-            if img.format not in cls.ALLOWED_FORMATS:
-                raise ValidationError(
-                    f"Formato no permitido. Formatos válidos: {', '.join(cls.ALLOWED_FORMATS)}"
-                )
-        except Exception:
-            raise ValidationError("El archivo no es una imagen válida")
+            with Image.open(image_file) as img:
+                # Verifica que el formato de la imagen sea válido
+                if img.format.upper() not in map(str.upper, cls.ALLOWED_FORMATS):
+                    raise ValidationError(
+                        f"Formato de imagen no permitido. Formatos válidos: {', '.join(cls.ALLOWED_FORMATS)}"
+                    )
+        except UnidentifiedImageError as e:
+            # Si no se puede abrir como imagen, considera que no es una imagen válida
+            raise ValidationError(f"El archivo no es una imagen válida: {str(e)}")
     
     @classmethod
     def extract_image_metadata(cls, image_file):
