@@ -8,6 +8,7 @@ from django.utils.timezone import now
 from datetime import date
 from django.db.models.functions import TruncDate
 from PIL import Image, UnidentifiedImageError
+from io import BytesIO
 from ..models import MovementInventory, Sale, ProductImage, AuditLog, InventorySnapshot, ProductVariant, Supplier
 
 
@@ -601,3 +602,35 @@ class ImageService:
             
             # Establecer la nueva imagen como primary
             ProductImage.objects.filter(id=image_id, product=product).update(is_primary=True)
+
+    @classmethod
+    def optimize_image(cls, image_file):
+        """
+        Optimiza la imagen: redimensiona a dimensiones máximas y comprime
+        
+        Args:
+            image_file: Archivo de imagen a optimizar (modifica en lugar)
+        """
+        try:
+            img = Image.open(image_file)
+            
+            # Redimensionar si supera las dimensiones máximas
+            if img.width > cls.MAX_DIMENSIONS[0] or img.height > cls.MAX_DIMENSIONS[1]:
+                img.thumbnail(cls.MAX_DIMENSIONS, Image.LANCZOS)
+            
+            # Comprimir: convertir a JPEG con calidad 85 para ahorrar espacio sin perder mucha calidad
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Guardar con compresión
+            output = BytesIO()
+            img.save(output, format='JPEG', quality=85, optimize=True)
+            output.seek(0)
+            
+            # Reemplazar el archivo original con la versión optimizada
+            with open(image_file.path, 'wb') as f:
+                f.write(output.getvalue())
+                
+        except Exception as e:
+            # No fallar si la optimización falla, solo loggear
+            print(f"Error optimizando imagen: {e}")

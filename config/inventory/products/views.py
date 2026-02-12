@@ -65,9 +65,15 @@ class ProductImageViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
 
     def perform_create(self, serializer):
-        """Extrae metadatos de imagen y registra usuario"""
+        """Extrae metadatos de imagen, optimiza y registra usuario"""
         try:
             image_file = serializer.validated_data['image']
+            metadata = ImageService.extract_image_metadata(image_file)
+            
+            # Optimizar imagen (redimensionar y comprimir)
+            ImageService.optimize_image(image_file)
+            
+            # Extraer metadatos nuevamente después de la optimización
             metadata = ImageService.extract_image_metadata(image_file)
             
             serializer.save(
