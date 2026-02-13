@@ -1,5 +1,7 @@
 from django.db import models
 from django.db.models import Sum
+from storages.backends.s3boto3 import S3Boto3Storage
+
 
 # Create your models here.
 
@@ -119,7 +121,11 @@ class ProductImage(models.Model):
     product = models.ForeignKey(
         Product, on_delete=models.PROTECT, related_name="images"
     )
-    image = models.ImageField(upload_to="products/")
+    image = models.ImageField(
+        upload_to="products/",
+        storage=S3Boto3Storage(),
+        help_text="Imagen del producto almacenada en Backblaze"
+    )
     is_primary = models.BooleanField(
         default=False,
         help_text="Marcar como imagen principal del producto"

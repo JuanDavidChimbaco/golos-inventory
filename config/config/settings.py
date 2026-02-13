@@ -14,8 +14,8 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env.local file
+load_dotenv('.env.local')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'rest_framework_simplejwt',
     'django_filters',
+    'storages',
 ]
 
 MIDDLEWARE = [
@@ -288,3 +289,18 @@ SPECTACULAR_SETTINGS = {
 
 # Email backend for development (console)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Backblaze B2 Storage Configuration
+AWS_ACCESS_KEY_ID = os.getenv('BACKBLAZE_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('BACKBLAZE_APPLICATION_KEY')
+AWS_STORAGE_BUCKET_NAME = os.getenv('BACKBLAZE_BUCKET_NAME')
+AWS_S3_ENDPOINT_URL = os.getenv('BACKBLAZE_ENDPOINT')
+AWS_S3_REGION_NAME = os.getenv('BACKBLAZE_REGION')
+AWS_S3_CUSTOM_DOMAIN = None
+AWS_DEFAULT_ACL = 'private'
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': 'max-age=86400',  # Cache por 1 día
+}
+
+# Usar Backblaze para archivos de media (imágenes)
+DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
