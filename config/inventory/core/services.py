@@ -119,7 +119,8 @@ def low_stock_variants():
     )
 
     return variants.filter(
-        current_stock__lte=F("stock_minimum")
+        current_stock__lte=F("stock_minimum"),
+        is_deleted=False
     )
 
 

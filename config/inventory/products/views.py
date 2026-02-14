@@ -2,8 +2,11 @@
 Views para gestión de productos
 """
 from drf_spectacular.utils import extend_schema
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
+from rest_framework.response import Response
+from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from django.db.models import F, Exists, OuterRef
 from ..models import Product, ProductVariant, ProductImage
 from ..core.services import ImageService
 from .serializers import (
@@ -26,7 +29,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
-    filterset_fields = ['brand', 'active']
+    filterset_fields = ['brand', 'active', 'product_type']
     search_fields = ['name', 'brand', 'description']
     ordering_fields = ['name', 'created_at', 'updated_at']
     ordering = ['name']
@@ -52,6 +55,14 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
     ordering_fields = ['price', 'cost', 'created_at', 'product__name']
     ordering = ['product__name', 'color', 'size']
     
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
+    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_deleted = True
+        instance.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 @extend_schema(tags=['ProductsImages'])
 class ProductImageViewSet(viewsets.ModelViewSet):

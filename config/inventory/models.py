@@ -74,6 +74,7 @@ class Product(models.Model):
         name (CharField): Nombre del producto
         brand (CharField): Marca del producto
         description (TextField): Descripción del producto
+        product_type (CharField): Tipo de producto (para zapatos)
         active (BooleanField): Estado del producto
         created_at (DateTimeField): Fecha de creación
         updated_at (DateTimeField): Fecha de actualización
@@ -81,9 +82,26 @@ class Product(models.Model):
         updated_by (CharField): Usuario que actualizó el producto
     """
 
+    PRODUCT_TYPES = [
+        ('sneakers', 'Tenis'),
+        ('heels', 'Tacones'),
+        ('classics', 'Clásicos'),
+        ('boots', 'Botas'),
+        ('sandals', 'Sandalias'),
+        ('flats', 'Planas'),
+        ('loafers', 'Mocasines'),
+        ('other', 'Otro'),
+    ]
+
     name = models.CharField(max_length=100)
     brand = models.CharField(max_length=50)
     description = models.TextField(blank=True, null=True)
+    product_type = models.CharField(
+        max_length=20,
+        choices=PRODUCT_TYPES,
+        default='sneakers',
+        help_text="Tipo de producto (especialmente para zapatos)"
+    )
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -120,6 +138,9 @@ class ProductImage(models.Model):
 
     product = models.ForeignKey(
         Product, on_delete=models.PROTECT, related_name="images"
+    )
+    variant = models.ForeignKey(
+        'ProductVariant', on_delete=models.SET_NULL, null=True, blank=True, related_name="images"
     )
     image = models.ImageField(
         upload_to="products/",
@@ -192,6 +213,7 @@ class ProductVariant(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.CharField(max_length=50)  # mientras se usa user
     updated_by = models.CharField(max_length=50)  # mientras se usa user
+    is_deleted = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Variant of {self.product.name} - {self.color} - {self.size}"
@@ -316,7 +338,7 @@ class SaleDetail(models.Model):
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self):
-        return f"Detail of {self.sales} - {self.variant.product.name} x {self.quantity}"
+        return f"Detail of {self.sale} - {self.variant.product.name} x {self.quantity}"
 
     class Meta:
         unique_together = ("sale", "variant")

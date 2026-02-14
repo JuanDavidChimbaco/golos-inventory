@@ -12,7 +12,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
         fields = [
-            "id", "product", "image", "is_primary", "alt_text",
+            "id", "product", "variant", "image", "is_primary", "alt_text",
             "file_size", "width", "height",
             "created_at", "updated_at", "created_by", "updated_by"
         ]
@@ -43,7 +43,10 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 class ProductReadSerializer(serializers.ModelSerializer):
     """Serializer para leer productos con relaciones"""
     images = ProductImageSerializer(many=True, read_only=True)
-    variants = ProductVariantSerializer(many=True, read_only=True)
+    variants = serializers.SerializerMethodField()
+
+    def get_variants(self, obj):
+        return ProductVariantSerializer(obj.variants.filter(is_deleted=False), many=True).data
 
     class Meta:
         model = Product

@@ -1,7 +1,7 @@
 """
 Views para dashboard y estadísticas
 """
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Sum, Count, DecimalField
@@ -9,11 +9,12 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 from datetime import timedelta
 from drf_spectacular.utils import extend_schema
+from django.core.exceptions import ValidationError
 from ..models import (
     ProductVariant, MovementInventory, Sale, Supplier, 
     Product
 )
-from ..core.services import low_stock_variants
+from ..core.services import low_stock_variants, create_purchase
 
 
 class DashboardViewSet(viewsets.GenericViewSet):
@@ -32,7 +33,7 @@ class DashboardViewSet(viewsets.GenericViewSet):
         
         # Estadísticas de productos
         total_products = Product.objects.count()
-        active_variants = ProductVariant.objects.filter(active=True).count()
+        active_variants = ProductVariant.objects.filter(active=True, is_deleted=False).count()
         low_stock_count = low_stock_variants().count()
         
         # Estadísticas de ventas
@@ -73,11 +74,11 @@ class DashboardViewSet(viewsets.GenericViewSet):
         
         # Valor del inventario
         variants_with_stock = ProductVariant.objects.annotate(
-            stock=Coalesce(Sum('movements__quantity'), 0, output_field=DecimalField())
-        ).filter(stock__gt=0)
+            current_stock=Coalesce(Sum('movements__quantity'), 0, output_field=DecimalField())
+        ).filter(current_stock__gt=0)
         
         inventory_value = sum(
-            variant.stock * variant.cost for variant in variants_with_stock
+            variant.current_stock * variant.cost for variant in variants_with_stock
         )
         
         return Response({
@@ -152,6 +153,52 @@ class DashboardViewSet(viewsets.GenericViewSet):
             'threshold': threshold,
             'products': data
         })
+    
+    @extend_schema(tags=['Dashboard'])
+    @action(detail=False, methods=['post'])
+    def create_purchase(self, request):
+        """Crear una compra (puede ser masiva)"""
+        items = request.data.get('items', [])
+        
+        if not items or not isinstance(items, list):
+            return Response({'error': 'Se requieren items para la compra'}, status=400)
+        
+        created_movements = []
+        
+        for item in items:
+            variant_id = item.get('variantId')
+            quantity = item.get('quantity')
+            unit_cost = item.get('unitCost')
+            
+            # Validar y convertir datos
+            try:
+                variant_id = int(variant_id)
+            except (ValueError, TypeError):
+                return Response({'error': 'ID de variante inválido'}, status=400)
+            
+            try:
+                quantity = int(quantity)
+            except (ValueError, TypeError):
+                return Response({'error': 'Cantidad inválida'}, status=400)
+            
+            try:
+                unit_cost = float(unit_cost or 0)
+            except (ValueError, TypeError):
+                return Response({'error': 'Costo unitario inválido'}, status=400)
+            
+            try:
+                movement = create_purchase(
+                    variant_id=variant_id,
+                    quantity=quantity,
+                    unit_cost=unit_cost,
+                    supplier_id=None,  # Por ahora sin supplier
+                    user=request.user
+                )
+                created_movements.append(movement.id)
+            except ValidationError as e:
+                return Response({'error': str(e)}, status=400)
+        
+        return Response({'ids': created_movements}, status=201)
     
     @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
