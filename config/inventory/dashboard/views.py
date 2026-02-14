@@ -1,20 +1,19 @@
 """
 Views para dashboard y estadísticas
 """
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Sum, Count, DecimalField
+from django.db.models import Sum, Count, DecimalField, Max
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from datetime import timedelta
 from drf_spectacular.utils import extend_schema
-from django.core.exceptions import ValidationError
 from ..models import (
-    ProductVariant, MovementInventory, Sale, Supplier, 
+    ProductVariant, MovementInventory, Sale, SaleDetail, Supplier, 
     Product
 )
-from ..core.services import low_stock_variants, create_purchase
+from ..core.services import low_stock_variants
 
 
 class DashboardViewSet(viewsets.GenericViewSet):
@@ -153,52 +152,6 @@ class DashboardViewSet(viewsets.GenericViewSet):
             'threshold': threshold,
             'products': data
         })
-    
-    @extend_schema(tags=['Dashboard'])
-    @action(detail=False, methods=['post'])
-    def create_purchase(self, request):
-        """Crear una compra (puede ser masiva)"""
-        items = request.data.get('items', [])
-        
-        if not items or not isinstance(items, list):
-            return Response({'error': 'Se requieren items para la compra'}, status=400)
-        
-        created_movements = []
-        
-        for item in items:
-            variant_id = item.get('variantId')
-            quantity = item.get('quantity')
-            unit_cost = item.get('unitCost')
-            
-            # Validar y convertir datos
-            try:
-                variant_id = int(variant_id)
-            except (ValueError, TypeError):
-                return Response({'error': 'ID de variante inválido'}, status=400)
-            
-            try:
-                quantity = int(quantity)
-            except (ValueError, TypeError):
-                return Response({'error': 'Cantidad inválida'}, status=400)
-            
-            try:
-                unit_cost = float(unit_cost or 0)
-            except (ValueError, TypeError):
-                return Response({'error': 'Costo unitario inválido'}, status=400)
-            
-            try:
-                movement = create_purchase(
-                    variant_id=variant_id,
-                    quantity=quantity,
-                    unit_cost=unit_cost,
-                    supplier_id=None,  # Por ahora sin supplier
-                    user=request.user
-                )
-                created_movements.append(movement.id)
-            except ValidationError as e:
-                return Response({'error': str(e)}, status=400)
-        
-        return Response({'ids': created_movements}, status=201)
     
     @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
