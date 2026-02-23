@@ -5,8 +5,9 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 from ..models import MovementInventory, InventorySnapshot
-from ..core.services import daily_inventory_summary, create_adjustment
+from ..core.services import daily_inventory_summary, create_adjustment, close_inventory_month
 from .serializers import (
     MovementInventorySerializer,
     InventoryHistorySerializer,
@@ -52,6 +53,8 @@ class InventoryHistoryViewSet(viewsets.ModelViewSet):
         - ?variant=12: Historial de una variante
         - ?type=purchase: Tipo específico de movimiento
         - ?page=2: Paginación
+        - ?start_date=2022-01-01: Fecha de inicio
+        - ?end_date=2022-01-31: Fecha de fin
         """
         qs = MovementInventory.objects.select_related(
             "variant", "variant__product"
@@ -60,7 +63,20 @@ class InventoryHistoryViewSet(viewsets.ModelViewSet):
         # Filtros
         product_id = self.request.query_params.get("product")
         variant_id = self.request.query_params.get("variant")
-        movement_type = self.request.query_params.get("type")
+        movement_type = self.request.query_params.get("movement_type")
+        start_date = self.request.query_params.get("start_date")
+        end_date = self.request.query_params.get("end_date")
+
+        # Map display names to raw values
+        display_to_raw = {
+            "Compra": "purchase",
+            "Venta": "sale_out",
+            "Ajuste": "adjustment",
+            "Devolución": "return",
+            "Devolución de venta": "sale_return",
+        }
+        if movement_type in display_to_raw:
+            movement_type = display_to_raw[movement_type]
 
         if product_id:
             qs = qs.filter(variant__product_id=product_id)
@@ -68,6 +84,10 @@ class InventoryHistoryViewSet(viewsets.ModelViewSet):
             qs = qs.filter(variant_id=variant_id)
         if movement_type:
             qs = qs.filter(movement_type=movement_type)
+        if start_date:
+            qs = qs.filter(created_at__date__gte=start_date)
+        if end_date:
+            qs = qs.filter(created_at__date__lte=end_date)
 
         return qs
         
@@ -145,10 +165,11 @@ class InventoryCloseMonthView(APIView):
         if not month:
             raise ValidationError("month es requerido")
 
-        close_inventory_month(
-            month=month,
-            user=request.user
-        )
+        # Parse month to year and month integers
+        year = int(month.split('-')[0])
+        month_num = int(month.split('-')[1])
+
+        close_inventory_month(year=year, month=month_num)
 
         return Response({"status": "month closed"})
 

@@ -228,57 +228,6 @@ class ProductVariant(models.Model):
         )["total"] or 0
 
 
-class MovementInventory(models.Model):
-    """Movimiento de inventario
-
-    Attributes:
-        variant (ForeignKey): Variante de producto al que pertenece el movimiento
-        movement_type (CharField): Tipo de movimiento (compra, venta, ajuste, devolución)
-        quantity (PositiveIntegerField): Cantidad del movimiento
-        observation (TextField): Observación del movimiento
-        supplier (ForeignKey): Proveedor (opcional, para compras y devoluciones)
-        created_at (DateTimeField): Fecha de creación
-        created_by (CharField): Usuario que creó el movimiento
-    """
-    class MovementType(models.TextChoices):
-        """Tipos de movimiento de inventario"""
-        
-        PURCHASE = "purchase", "Compra"
-        SALE_OUT = "sale_out", "Salida por venta"
-        SALE_RETURN = "sale_return", "Devolución de venta"
-        ADJUSTMENT = "adjustment", "Ajuste"
-        RETURN = "return", "Devolución proveedor"
-
-    variant = models.ForeignKey(
-        ProductVariant, on_delete=models.PROTECT, related_name="movements"
-    )
-    movement_type = models.CharField(
-        max_length=20,
-        choices=MovementType.choices
-    )
-    quantity = models.IntegerField()
-    observation = models.TextField(blank=True, null=True)
-    supplier = models.ForeignKey(
-        Supplier, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name="movements",
-        help_text="Proveedor (para compras y devoluciones)"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.CharField(max_length=50)
-
-    class Meta:
-        permissions = [
-            # Permisos personalizados únicos (los demás son creados automáticamente por Django)
-            ("manage_inventory", "Can manage inventory"),
-        ]
-
-    def __str__(self):
-        return f"Movement of {self.variant.product.name} - {self.movement_type} {self.quantity}"
-
-
 class Sale(models.Model):
     """Venta
 
@@ -342,6 +291,65 @@ class SaleDetail(models.Model):
 
     class Meta:
         unique_together = ("sale", "variant")
+
+
+class MovementInventory(models.Model):
+    """Movimiento de inventario
+
+    Attributes:
+        variant (ForeignKey): Variante de producto al que pertenece el movimiento
+        movement_type (CharField): Tipo de movimiento (compra, venta, ajuste, devolución)
+        quantity (PositiveIntegerField): Cantidad del movimiento
+        observation (TextField): Observación del movimiento
+        supplier (ForeignKey): Proveedor (opcional, para compras y devoluciones)
+        created_at (DateTimeField): Fecha de creación
+        created_by (CharField): Usuario que creó el movimiento
+    """
+    class MovementType(models.TextChoices):
+        """Tipos de movimiento de inventario"""
+        
+        PURCHASE = "purchase", "Compra"
+        SALE_OUT = "sale_out", "Salida por venta"
+        SALE_RETURN = "sale_return", "Devolución de venta"
+        ADJUSTMENT = "adjustment", "Ajuste"
+        RETURN = "return", "Devolución proveedor"
+
+    variant = models.ForeignKey(
+        ProductVariant, on_delete=models.PROTECT, related_name="movements"
+    )
+    sale = models.ForeignKey(
+        Sale,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_movements",
+        help_text="Venta relacionada (para salidas y devoluciones)"
+    )
+    movement_type = models.CharField(
+        max_length=20,
+        choices=MovementType.choices
+    )
+    quantity = models.IntegerField()
+    observation = models.TextField(blank=True, null=True)
+    supplier = models.ForeignKey(
+        Supplier, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name="movements",
+        help_text="Proveedor (para compras y devoluciones)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.CharField(max_length=50)
+
+    class Meta:
+        permissions = [
+            # Permisos personalizados únicos (los demás son creados automáticamente por Django)
+            ("manage_inventory", "Can manage inventory"),
+        ]
+
+    def __str__(self):
+        return f"Movement of {self.variant.product.name} - {self.movement_type} {self.quantity}"
 
 
 class AuditLog(models.Model):

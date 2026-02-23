@@ -48,7 +48,7 @@ class SupplierSimpleSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Supplier
-        fields = ["id", "name", "is_active", "last_purchase_date"]
+        fields = ["id", "name", "phone", "address", "nit", "average_price", "is_active", "last_purchase_date"]
 
 
 # Serializers para devoluciones a proveedores

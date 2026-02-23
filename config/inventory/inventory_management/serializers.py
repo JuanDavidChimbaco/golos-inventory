@@ -42,10 +42,7 @@ class InventoryHistorySerializer(serializers.ModelSerializer):
         source="variant.sku",
         read_only=True
     )
-    movement_type_display = serializers.CharField(
-        source="get_movement_type_display",
-        read_only=True
-    )
+    movement_type_display = serializers.SerializerMethodField()
     stock_after = serializers.SerializerMethodField()
     stock_before = serializers.SerializerMethodField()
     direction = serializers.SerializerMethodField()

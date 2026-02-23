@@ -5,7 +5,6 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
-from django.core.exceptions import ValidationError
 from drf_spectacular.utils import extend_schema
 from ..models import ProductVariant, Product, Supplier
 from ..core.services import create_purchase, create_adjustment
