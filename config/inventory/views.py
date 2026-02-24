@@ -2,7 +2,7 @@
 Views principal - Importaciones desde módulos organizados
 """
 
-from .users.views import UserViewSet, GroupViewSet
+from .users.views import UserViewSet, GroupViewSet, PermissionViewSet
 from .sales.views import SaleViewSet, SaleDetailViewSet, SaleReturnViewSet
 from .suppliers.views import SupplierViewSet, SupplierReturnViewSet
 from .products.views import ProductViewSet, ProductVariantViewSet, ProductImageViewSet
@@ -25,6 +25,7 @@ __all__ = [
     # Users
     "UserViewSet",
     "GroupViewSet",
+    "PermissionViewSet",
     # Sales
     "SaleViewSet",
     "SaleDetailViewSet",

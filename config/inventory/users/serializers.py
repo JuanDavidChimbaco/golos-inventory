@@ -1,7 +1,7 @@
 """
 Serializers para gestión de usuarios y grupos
 """
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User, Group, Permission
 from rest_framework import serializers
 
 
@@ -38,6 +38,27 @@ class UserManagementSerializer(serializers.ModelSerializer):
 
 class GroupSerializer(serializers.ModelSerializer):
     """Serializer para gestión de grupos"""
+    permissions = serializers.SerializerMethodField(read_only=True)
+    permission_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Permission.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        source="permissions",
+    )
+
+    def get_permissions(self, obj):
+        return [
+            {
+                "id": perm.id,
+                "name": perm.name,
+                "codename": perm.codename,
+                "content_type": perm.content_type_id,
+                "content_type_name": perm.content_type.model,
+            }
+            for perm in obj.permissions.all()
+        ]
+
     class Meta:
         model = Group
-        fields = ["id", "name"]
+        fields = ["id", "name", "permissions", "permission_ids"]

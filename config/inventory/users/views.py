@@ -4,7 +4,7 @@ Views para gestión de usuarios
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User, Group, Permission
 from .serializers import (
     UserSerializer,
     UserCreateSerializer,
@@ -50,6 +50,43 @@ class GroupViewSet(viewsets.ModelViewSet):
     - Actualización: Usuarios con permiso change_group
     - Eliminación: Usuarios con permiso delete_group
     """
-    queryset = Group.objects.all()
+    queryset = Group.objects.prefetch_related("permissions__content_type").all()
     serializer_class = GroupSerializer
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
+
+
+@extend_schema(tags=['Permissions'])
+class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet de solo lectura para catálogo de permisos.
+    """
+    queryset = Permission.objects.select_related("content_type").all().order_by("content_type__app_label", "codename")
+    permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset().filter(content_type__app_label="inventory")
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            data = [
+                {
+                    "id": perm.id,
+                    "name": perm.name,
+                    "codename": perm.codename,
+                    "content_type": perm.content_type_id,
+                    "content_type_name": perm.content_type.model,
+                }
+                for perm in page
+            ]
+            return self.get_paginated_response(data)
+
+        data = [
+            {
+                "id": perm.id,
+                "name": perm.name,
+                "codename": perm.codename,
+                "content_type": perm.content_type_id,
+                "content_type_name": perm.content_type.model,
+            }
+            for perm in queryset
+        ]
+        return Response(data)

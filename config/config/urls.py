@@ -65,6 +65,11 @@ router.register(
     basename="groups"
 )
 router.register(
+    r"permissions",
+    views.PermissionViewSet,
+    basename="permissions"
+)
+router.register(
     r"dashboard", 
     views.DashboardViewSet, 
     basename="dashboard"
