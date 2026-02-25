@@ -8,6 +8,7 @@ from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from ..models import ProductVariant, Product, Supplier
 from ..core.services import create_purchase, create_adjustment
+from ..core.api_responses import error_response, success_response
 
 @extend_schema(tags=['Batch'])
 class BatchOperationsViewSet(viewsets.GenericViewSet):
@@ -22,9 +23,10 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
         updates = request.data.get('updates', [])
         
         if not updates:
-            return Response(
-                {'error': 'Se requieren actualizaciones'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail='Se requieren actualizaciones',
+                code='MISSING_UPDATES',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
         
         try:
@@ -59,17 +61,19 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
                     except Exception as e:
                         errors.append({'error': str(e), 'update': update})
                 
-                return Response({
-                    'message': f'Se actualizaron {updated_count} variantes',
-                    'updated_count': updated_count,
-                    'errors_count': len(errors),
-                    'errors': errors
-                })
+                return success_response(
+                    detail=f'Se actualizaron {updated_count} variantes',
+                    code='BATCH_PRICES_UPDATED',
+                    updated_count=updated_count,
+                    errors_count=len(errors),
+                    errors=errors,
+                )
                 
         except Exception as e:
-            return Response(
-                {'error': f'Error en actualización masiva: {str(e)}'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail=f'Error en actualización masiva: {str(e)}',
+                code='BATCH_PRICES_UPDATE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
     
     @action(detail=False, methods=['post'])
@@ -78,9 +82,10 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
         updates = request.data.get('updates', [])
         
         if not updates:
-            return Response(
-                {'error': 'Se requieren actualizaciones'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail='Se requieren actualizaciones',
+                code='MISSING_UPDATES',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
         
         try:
@@ -108,17 +113,19 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
                     except Exception as e:
                         errors.append({'error': str(e), 'update': update})
                 
-                return Response({
-                    'message': f'Se actualizaron {updated_count} variantes',
-                    'updated_count': updated_count,
-                    'errors_count': len(errors),
-                    'errors': errors
-                })
+                return success_response(
+                    detail=f'Se actualizaron {updated_count} variantes',
+                    code='BATCH_STOCK_MINIMUM_UPDATED',
+                    updated_count=updated_count,
+                    errors_count=len(errors),
+                    errors=errors,
+                )
                 
         except Exception as e:
-            return Response(
-                {'error': f'Error en actualización masiva: {str(e)}'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail=f'Error en actualización masiva: {str(e)}',
+                code='BATCH_STOCK_MINIMUM_UPDATE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
     
     @action(detail=False, methods=['post'])
@@ -127,9 +134,10 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
         products_data = request.data.get('products', [])
         
         if not products_data:
-            return Response(
-                {'error': 'Se requieren productos'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail='Se requieren productos',
+                code='MISSING_PRODUCTS',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
         
         try:
@@ -168,17 +176,19 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
                     except Exception as e:
                         errors.append({'error': str(e), 'product': product_data})
                 
-                return Response({
-                    'message': f'Se crearon {created_count} productos',
-                    'created_count': created_count,
-                    'errors_count': len(errors),
-                    'errors': errors
-                })
+                return success_response(
+                    detail=f'Se crearon {created_count} productos',
+                    code='BATCH_PRODUCTS_CREATED',
+                    created_count=created_count,
+                    errors_count=len(errors),
+                    errors=errors,
+                )
                 
         except Exception as e:
-            return Response(
-                {'error': f'Error en creación masiva: {str(e)}'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail=f'Error en creación masiva: {str(e)}',
+                code='BATCH_PRODUCTS_CREATE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
     
     @action(detail=False, methods=['post'])
@@ -187,9 +197,10 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
         purchases = request.data.get('purchases', [])
         
         if not purchases:
-            return Response(
-                {'error': 'Se requieren compras'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail='Se requieren compras',
+                code='MISSING_PURCHASES',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
         
         try:
@@ -233,18 +244,20 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
                     except Exception as e:
                         errors.append({'error': str(e), 'purchase': purchase_data})
                 
-                return Response({
-                    'message': f'Se procesaron {created_count} compras con {len(total_movements)} movimientos',
-                    'created_count': created_count,
-                    'total_movements': len(total_movements),
-                    'errors_count': len(errors),
-                    'errors': errors
-                })
+                return success_response(
+                    detail=f'Se procesaron {created_count} compras con {len(total_movements)} movimientos',
+                    code='BATCH_PURCHASES_CREATED',
+                    created_count=created_count,
+                    total_movements=len(total_movements),
+                    errors_count=len(errors),
+                    errors=errors,
+                )
                 
         except Exception as e:
-            return Response(
-                {'error': f'Error en compra masiva: {str(e)}'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail=f'Error en compra masiva: {str(e)}',
+                code='BATCH_PURCHASES_CREATE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
     
     @action(detail=False, methods=['post'])
@@ -253,9 +266,10 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
         adjustments = request.data.get('adjustments', [])
         
         if not adjustments:
-            return Response(
-                {'error': 'Se requieren ajustes'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail='Se requieren ajustes',
+                code='MISSING_ADJUSTMENTS',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
         
         try:
@@ -287,18 +301,20 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
                     except Exception as e:
                         errors.append({'error': str(e), 'adjustment': adjustment_data})
                 
-                return Response({
-                    'message': f'Se crearon {created_count} ajustes',
-                    'created_count': created_count,
-                    'total_movements': len(total_movements),
-                    'errors_count': len(errors),
-                    'errors': errors
-                })
+                return success_response(
+                    detail=f'Se crearon {created_count} ajustes',
+                    code='BATCH_ADJUSTMENTS_CREATED',
+                    created_count=created_count,
+                    total_movements=len(total_movements),
+                    errors_count=len(errors),
+                    errors=errors,
+                )
                 
         except Exception as e:
-            return Response(
-                {'error': f'Error en ajuste masivo: {str(e)}'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail=f'Error en ajuste masivo: {str(e)}',
+                code='BATCH_ADJUSTMENTS_CREATE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
     
     @action(detail=False, methods=['post'])
@@ -308,9 +324,10 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
         action_type = request.data.get('action', 'toggle')  # 'activate', 'deactivate', 'toggle'
         
         if not product_ids:
-            return Response(
-                {'error': 'Se requieren product_ids'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail='Se requieren product_ids',
+                code='MISSING_PRODUCT_IDS',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
         
         try:
@@ -338,17 +355,19 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
                     except Exception as e:
                         errors.append({'error': str(e), 'product_id': product_id})
                 
-                return Response({
-                    'message': f'Se actualizaron {updated_count} productos',
-                    'updated_count': updated_count,
-                    'errors_count': len(errors),
-                    'errors': errors
-                })
+                return success_response(
+                    detail=f'Se actualizaron {updated_count} productos',
+                    code='BATCH_PRODUCTS_STATUS_UPDATED',
+                    updated_count=updated_count,
+                    errors_count=len(errors),
+                    errors=errors,
+                )
                 
         except Exception as e:
-            return Response(
-                {'error': f'Error en actualización masiva: {str(e)}'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail=f'Error en actualización masiva: {str(e)}',
+                code='BATCH_PRODUCTS_STATUS_UPDATE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
     
     @action(detail=False, methods=['post'])
@@ -358,9 +377,10 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
         action_type = request.data.get('action', 'toggle')  # 'activate', 'deactivate', 'toggle'
         
         if not variant_ids:
-            return Response(
-                {'error': 'Se requieren variant_ids'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail='Se requieren variant_ids',
+                code='MISSING_VARIANT_IDS',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
         
         try:
@@ -388,15 +408,17 @@ class BatchOperationsViewSet(viewsets.GenericViewSet):
                     except Exception as e:
                         errors.append({'error': str(e), 'variant_id': variant_id})
                 
-                return Response({
-                    'message': f'Se actualizaron {updated_count} variantes',
-                    'updated_count': updated_count,
-                    'errors_count': len(errors),
-                    'errors': errors
-                })
+                return success_response(
+                    detail=f'Se actualizaron {updated_count} variantes',
+                    code='BATCH_VARIANTS_STATUS_UPDATED',
+                    updated_count=updated_count,
+                    errors_count=len(errors),
+                    errors=errors,
+                )
                 
         except Exception as e:
-            return Response(
-                {'error': f'Error en actualización masiva: {str(e)}'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail=f'Error en actualización masiva: {str(e)}',
+                code='BATCH_VARIANTS_STATUS_UPDATE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )

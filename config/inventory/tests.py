@@ -3,11 +3,15 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.core.files.uploadedfile import SimpleUploadedFile
+from rest_framework.test import APITestCase
+from django.urls import reverse
+from django.utils import timezone
+from datetime import timedelta
 from decimal import Decimal
 from PIL import Image
 from io import BytesIO
-from .models import Product, ProductVariant, MovementInventory, Sale, SaleDetail, ProductImage
-from .services import confirm_sale, ImageService
+from .models import Product, ProductVariant, MovementInventory, Sale, SaleDetail, ProductImage, Supplier
+from .core.services import confirm_sale, ImageService
 
 
 class ConfirmSaleServiceTest(TestCase):
@@ -513,3 +517,198 @@ class ProductImageSerializerTest(TestCase):
         self.assertNotEqual(product_image.file_size, 999999)
         self.assertNotEqual(product_image.width, 5000)
         self.assertNotEqual(product_image.height, 5000)
+
+
+class ApiErrorContractTest(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="apiadmin",
+            email="apiadmin@example.com",
+            password="adminpass123",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.product = Product.objects.create(
+            name="Air Contract Test",
+            brand="Nike",
+            description="Producto para test de contrato",
+            created_by=self.user.username,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            gender="unisex",
+            color="Negro",
+            size="42",
+            price=Decimal("120.00"),
+            cost=Decimal("80.00"),
+            stock_minimum=2,
+            created_by=self.user.username,
+        )
+        self.sale = Sale.objects.create(
+            customer="Cliente API Test",
+            created_by=self.user.username,
+            status="pending",
+        )
+        SaleDetail.objects.create(
+            sale=self.sale,
+            variant=self.variant,
+            quantity=3,
+            price=Decimal("120.00"),
+            subtotal=Decimal("360.00"),
+        )
+        MovementInventory.objects.create(
+            variant=self.variant,
+            movement_type=MovementInventory.MovementType.PURCHASE,
+            quantity=1,
+            created_by=self.user.username,
+        )
+
+    def test_confirm_sale_insufficient_stock_returns_standard_error_contract(self):
+        url = reverse("sales-confirm", args=[self.sale.id])
+        response = self.client.post(url, {}, format="json")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertIn("errors", response.data)
+        self.assertEqual(response.data["code"], "SALE_CONFIRMATION_FAILED")
+        self.assertIsInstance(response.data["errors"], list)
+        self.assertTrue(any("Stock insuficiente" in message for message in response.data["errors"]))
+
+    def test_purchase_supplier_purchases_missing_supplier_id_returns_standard_error_contract(self):
+        url = reverse("purchases-supplier-purchases")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertIn("errors", response.data)
+        self.assertEqual(response.data["code"], "MISSING_SUPPLIER_ID")
+        self.assertIsInstance(response.data["errors"], list)
+
+    def test_batch_update_prices_missing_updates_returns_standard_error_contract(self):
+        url = reverse("batch-update-prices")
+        response = self.client.post(url, {}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertIn("errors", response.data)
+        self.assertEqual(response.data["code"], "MISSING_UPDATES")
+        self.assertIsInstance(response.data["errors"], list)
+
+    def test_supplier_purchase_missing_items_returns_standard_error_contract(self):
+        supplier = Supplier.objects.create(
+            name="Proveedor Test",
+            nit="900123456-7",
+            phone="3000000000",
+            created_by=self.user.username,
+        )
+        url = reverse("suppliers-purchase", args=[supplier.id])
+        response = self.client.post(url, {"items": []}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertIn("errors", response.data)
+        self.assertEqual(response.data["code"], "MISSING_ITEMS")
+        self.assertIsInstance(response.data["errors"], list)
+
+    def test_inventory_close_month_missing_month_returns_standard_error_contract(self):
+        response = self.client.post("/inventory/close-month/", {}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertIn("errors", response.data)
+        self.assertEqual(response.data["code"], "MISSING_MONTH")
+        self.assertIsInstance(response.data["errors"], list)
+
+    def test_inventory_close_month_invalid_month_format_returns_standard_error_contract(self):
+        response = self.client.post("/inventory/close-month/", {"month": "2026/13"}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertIn("errors", response.data)
+        self.assertEqual(response.data["code"], "INVALID_MONTH_FORMAT")
+        self.assertIsInstance(response.data["errors"], list)
+
+    def test_confirm_sale_not_found_returns_standard_error_contract(self):
+        url = reverse("sales-confirm", args=[999999])
+        response = self.client.post(url, {}, format="json")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertIn("errors", response.data)
+        self.assertEqual(response.data["code"], "SALE_NOT_FOUND")
+        self.assertIsInstance(response.data["errors"], list)
+
+    def test_confirm_sale_success_returns_standard_success_contract(self):
+        MovementInventory.objects.create(
+            variant=self.variant,
+            movement_type=MovementInventory.MovementType.PURCHASE,
+            quantity=5,
+            created_by=self.user.username,
+        )
+        url = reverse("sales-confirm", args=[self.sale.id])
+        response = self.client.post(url, {}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertEqual(response.data["code"], "SALE_CONFIRMED")
+        self.assertIn("Venta confirmada", response.data["detail"])
+
+    def test_batch_update_prices_success_returns_standard_success_contract(self):
+        url = reverse("batch-update-prices")
+        payload = {
+            "updates": [
+                {
+                    "variant_id": self.variant.id,
+                    "price": 130,
+                    "cost": 90,
+                }
+            ]
+        }
+        response = self.client.post(url, payload, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertEqual(response.data["code"], "BATCH_PRICES_UPDATED")
+        self.assertIn("updated_count", response.data)
+
+    def test_inventory_close_month_success_returns_standard_success_contract(self):
+        past_month = (timezone.now().date().replace(day=1) - timedelta(days=1)).replace(day=1)
+        response = self.client.post(
+            "/inventory/close-month/",
+            {"month": past_month.strftime("%Y-%m-%d")},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertEqual(response.data["code"], "MONTH_CLOSED")
+
+    def test_dashboard_overview_success_returns_standard_success_contract(self):
+        url = reverse("dashboard-overview")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertEqual(response.data["code"], "DASHBOARD_OVERVIEW_OK")
+        self.assertIn("products", response.data)
+
+    def test_notifications_low_stock_alerts_success_returns_standard_success_contract(self):
+        url = reverse("notifications-low-stock-alerts")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertEqual(response.data["code"], "NOTIFICATIONS_LOW_STOCK_ALERTS_OK")
+        self.assertIn("summary", response.data)

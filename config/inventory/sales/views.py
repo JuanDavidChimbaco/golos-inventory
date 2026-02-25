@@ -6,11 +6,15 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError as DRFValidationError
 from django.core.exceptions import ValidationError
 from django.db.models import Sum, Count
 from ..models import Sale, SaleDetail, MovementInventory, models
 from ..core.services import SaleService
+from ..core.api_responses import (
+    error_response,
+    success_response,
+    validation_error_payload,
+)
 from .serializers import (
     SaleCreateSerializer,
     SaleReadSerializer,
@@ -61,16 +65,33 @@ class SaleViewSet(viewsets.ModelViewSet):
 
         # Verificar permiso específico para confirmar ventas
         if not request.user.has_perm("inventory.confirm_sale"):
-            raise DRFValidationError("No tienes permiso para confirmar ventas")
+            return error_response(
+                detail="No tienes permiso para confirmar ventas",
+                code="PERMISSION_DENIED",
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
 
         try:
-            sale = self.get_object()
             SaleService.confirm_sale(sale_id=pk, user=request.user)
-            return Response({'status': 'Venta confirmada y stock actualizado'}, status=status.HTTP_200_OK)
+            return success_response(
+                detail="Venta confirmada y stock actualizado",
+                code="SALE_CONFIRMED",
+            )
         except ValidationError as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            payload = validation_error_payload(
+                e,
+                default_detail="No se pudo confirmar la venta",
+                default_code="SALE_CONFIRMATION_FAILED",
+            )
+            is_stock_conflict = any("Stock insuficiente" in msg for msg in payload["errors"])
+            http_status = status.HTTP_409_CONFLICT if is_stock_conflict else status.HTTP_400_BAD_REQUEST
+            return Response(payload, status=http_status)
         except Sale.DoesNotExist:
-            return Response({'error': 'Venta no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(
+                detail="Venta no encontrada",
+                code="SALE_NOT_FOUND",
+                http_status=status.HTTP_404_NOT_FOUND,
+            )
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
@@ -84,7 +105,11 @@ class SaleViewSet(viewsets.ModelViewSet):
         try:
             sale = self.get_object()
             if sale.status != "pending":
-                return Response({'error': 'Solo se pueden cancelar ventas pendientes'}, status=status.HTTP_400_BAD_REQUEST)
+                return error_response(
+                    detail="Solo se pueden cancelar ventas pendientes",
+                    code="INVALID_SALE_STATUS",
+                    http_status=status.HTTP_400_BAD_REQUEST,
+                )
             
             sale.status = "canceled"
             sale.save()
@@ -102,11 +127,22 @@ class SaleViewSet(viewsets.ModelViewSet):
                 },
             )
             
-            return Response({'status': 'Venta cancelada'}, status=status.HTTP_200_OK)
+            return success_response(
+                detail="Venta cancelada",
+                code="SALE_CANCELED",
+            )
         except Sale.DoesNotExist:
-            return Response({'error': 'Venta no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(
+                detail="Venta no encontrada",
+                code="SALE_NOT_FOUND",
+                http_status=status.HTTP_404_NOT_FOUND,
+            )
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail=str(e),
+                code="SALE_CANCELLATION_FAILED",
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 @extend_schema(tags=["SalesReturns"])
@@ -189,16 +225,19 @@ class SaleReturnViewSet(viewsets.ModelViewSet):
                     movements[i].observation += f" - Motivo: {item_data['reason']}"
                     movements[i].save(update_fields=["observation"])
 
-            return Response(
-                {
-                    "message": f"Se crearon {len(movements)} movimientos de devolución",
-                    "returns": SaleReturnSerializer(movements, many=True).data,
-                },
-                status=status.HTTP_201_CREATED,
+            return success_response(
+                detail=f"Se crearon {len(movements)} movimientos de devolución",
+                code="SALE_RETURN_CREATED",
+                http_status=status.HTTP_201_CREATED,
+                returns=SaleReturnSerializer(movements, many=True).data,
             )
 
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail=str(e),
+                code="SALE_RETURN_CREATE_FAILED",
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
 
     @action(detail=False, methods=["get"])
     def return_stats(self, request):
@@ -236,9 +275,18 @@ class SaleReturnViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_201_CREATED,
                 )
             except Exception as e:
-                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                return error_response(
+                    detail=str(e),
+                    code="SALE_RETURN_CREATE_FAILED",
+                    http_status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return error_response(
+            detail="Datos invalidos para crear devolucion",
+            code="VALIDATION_ERROR",
+            http_status=status.HTTP_400_BAD_REQUEST,
+            errors=[str(serializer.errors)],
+        )
 
     @action(detail=False, methods=["get"], url_path="list-returns")
     def sale_returns(self, request):
@@ -246,7 +294,11 @@ class SaleReturnViewSet(viewsets.ModelViewSet):
         sale_id = request.query_params.get("sale_id")
 
         if not sale_id:
-            return Response({"error": "Se requiere sale_id"}, status=400)
+            return error_response(
+                detail="Se requiere sale_id",
+                code="MISSING_SALE_ID",
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Buscamos los movimientos de tipo SALE_RETURN que mencionen esta venta
         returns = MovementInventory.objects.filter(

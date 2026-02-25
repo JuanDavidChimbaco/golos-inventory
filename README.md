@@ -421,6 +421,41 @@ config/inventory/
 
 ---
 
+## Contrato de Respuestas API
+
+### Respuesta de Exito (estandar)
+Todos los endpoints estandarizados incluyen:
+
+```json
+{
+  "detail": "Operacion realizada correctamente",
+  "code": "OPERATION_OK",
+  "...": "payload especifico del endpoint"
+}
+```
+
+### Respuesta de Error (estandar)
+Todos los errores de negocio/validacion devuelven:
+
+```json
+{
+  "detail": "Mensaje principal de error",
+  "code": "VALIDATION_ERROR",
+  "errors": [
+    "Mensaje detallado 1",
+    "Mensaje detallado 2"
+  ]
+}
+```
+
+### Codigos HTTP recomendados
+- `400`: error de validacion
+- `403`: permiso insuficiente
+- `404`: recurso no encontrado
+- `409`: conflicto de negocio (ejemplo: stock insuficiente)
+
+---
+
 ## Casos de Uso
 
 ### Tienda Online:

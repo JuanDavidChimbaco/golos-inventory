@@ -5,12 +5,12 @@ from rest_framework import viewsets, permissions, status
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from django.db.models import Avg, Max, Count, Sum
-from django.utils.timezone import now
+from django.db.models import Count, Sum
 from django.core.exceptions import ValidationError
 from datetime import datetime
 from ..models import Supplier, MovementInventory
 from ..core.services import create_purchase, create_supplier_return
+from ..core.api_responses import error_response, success_response, validation_error_payload
 from .serializers import (
     SupplierSerializer, 
     SupplierSimpleSerializer,
@@ -59,9 +59,10 @@ class SupplierViewSet(viewsets.ModelViewSet):
         items = request.data.get('items', [])
         
         if not items:
-            return Response(
-                {'error': 'Se deben proporcionar items para la compra'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail='Se deben proporcionar items para la compra',
+                code='MISSING_ITEMS',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
         
         try:
@@ -77,15 +78,26 @@ class SupplierViewSet(viewsets.ModelViewSet):
                 )
                 movements.append(movement)
             
-            return Response({
-                'message': f'Compra creada con {len(movements)} items',
-                'movements': [{'id': m.id, 'variant': m.variant.product.name} for m in movements]
-            }, status=status.HTTP_201_CREATED)
+            return success_response(
+                detail=f'Compra creada con {len(movements)} items',
+                code='SUPPLIER_PURCHASE_CREATED',
+                http_status=status.HTTP_201_CREATED,
+                movements=[{'id': m.id, 'variant': m.variant.product.name} for m in movements],
+            )
             
         except ValidationError as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            payload = validation_error_payload(
+                e,
+                default_detail='No se pudo crear la compra del proveedor',
+                default_code='SUPPLIER_PURCHASE_FAILED',
+            )
+            return Response(payload, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail=str(e),
+                code='SUPPLIER_PURCHASE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 @extend_schema(tags=['SuppliersReturns'])
@@ -162,16 +174,30 @@ class SupplierReturnViewSet(viewsets.ModelViewSet):
             )
             
         except ValidationError as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            payload = validation_error_payload(
+                e,
+                default_detail='No se pudo crear la devolucion a proveedor',
+                default_code='SUPPLIER_RETURN_FAILED',
+            )
+            return Response(payload, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'error': f'Error al crear devolución: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail=f'Error al crear devolucion: {str(e)}',
+                code='SUPPLIER_RETURN_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
     
     @action(detail=False, methods=['post'])
     def bulk_return(self, request):
         """Crear múltiples devoluciones en una sola petición"""
         serializer = SupplierReturnBulkSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail='Datos invalidos para devolucion masiva',
+                code='VALIDATION_ERROR',
+                http_status=status.HTTP_400_BAD_REQUEST,
+                errors=[str(serializer.errors)],
+            )
         
         try:
             movements = []
@@ -189,15 +215,26 @@ class SupplierReturnViewSet(viewsets.ModelViewSet):
                 )
                 movements.append(movement)
             
-            return Response({
-                'message': f'Se crearon {len(movements)} devoluciones exitosamente',
-                'returns': SupplierReturnSerializer(movements, many=True, context={'request': request}).data
-            }, status=status.HTTP_201_CREATED)
+            return success_response(
+                detail=f'Se crearon {len(movements)} devoluciones exitosamente',
+                code='SUPPLIER_BULK_RETURN_CREATED',
+                http_status=status.HTTP_201_CREATED,
+                returns=SupplierReturnSerializer(movements, many=True, context={'request': request}).data,
+            )
             
         except ValidationError as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            payload = validation_error_payload(
+                e,
+                default_detail='No se pudieron crear las devoluciones',
+                default_code='SUPPLIER_BULK_RETURN_FAILED',
+            )
+            return Response(payload, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({'error': f'Error al crear devoluciones: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail=f'Error al crear devoluciones: {str(e)}',
+                code='SUPPLIER_BULK_RETURN_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
     
     @action(detail=False, methods=['get'])
     def return_stats(self, request):
@@ -237,9 +274,10 @@ class SupplierReturnViewSet(viewsets.ModelViewSet):
         supplier_id = request.query_params.get('supplier_id')
         
         if not supplier_id:
-            return Response(
-                {'error': 'Se requiere supplier_id'}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail='Se requiere supplier_id',
+                code='MISSING_SUPPLIER_ID',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
         
         try:
@@ -260,47 +298,11 @@ class SupplierReturnViewSet(viewsets.ModelViewSet):
             })
             
         except Supplier.DoesNotExist:
-            return Response(
-                {'error': 'Proveedor no encontrado'}, 
-                status=status.HTTP_404_NOT_FOUND
+            return error_response(
+                detail='Proveedor no encontrado',
+                code='SUPPLIER_NOT_FOUND',
+                http_status=status.HTTP_404_NOT_FOUND,
             )
-        
-        if not items:
-            return Response(
-                {"detail": "Se requiere al menos un item"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        movements_created = []
-        total_amount = 0
-        
-        for item in items:
-            try:
-                movement = create_purchase(
-                    variant_id=item['variant_id'],
-                    quantity=item['quantity'],
-                    unit_cost=item['unit_cost'],
-                    supplier_name=supplier.name,
-                    user=request.user
-                )
-                movements_created.append(movement.id)
-                total_amount += item['quantity'] * item['unit_cost']
-            except Exception as e:
-                return Response(
-                    {"detail": f"Error en item {item.get('variant_id')}: {str(e)}"}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        
-        # Actualizar datos del proveedor
-        supplier.last_purchase_date = now().date()
-        supplier.save()
-        
-        return Response({
-            "status": "purchase created",
-            "supplier": supplier.name,
-            "movements_created": movements_created,
-            "total_amount": total_amount
-        })
 
     @action(detail=True, methods=['post'])
     def return_to_supplier(self, request, pk=None):
@@ -325,16 +327,18 @@ class SupplierReturnViewSet(viewsets.ModelViewSet):
                 user=request.user
             )
             
-            return Response({
-                "status": "return created",
-                "supplier": supplier.name,
-                "movement_id": movement.id
-            })
+            return success_response(
+                detail='Devolucion creada',
+                code='SUPPLIER_RETURN_CREATED',
+                supplier=supplier.name,
+                movement_id=movement.id,
+            )
             
         except Exception as e:
-            return Response(
-                {"detail": str(e)}, 
-                status=status.HTTP_400_BAD_REQUEST
+            return error_response(
+                detail=str(e),
+                code='SUPPLIER_RETURN_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
             )
 
     @action(detail=False, methods=['get'])

@@ -1,7 +1,7 @@
 """
 Views para gestión de usuarios
 """
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.contrib.auth.models import User, Group, Permission
@@ -9,6 +9,8 @@ from .serializers import (
     UserSerializer,
     UserCreateSerializer,
     UserManagementSerializer,
+    UserMeSerializer,
+    UserMePasswordSerializer,
     GroupSerializer,
 )
 from drf_spectacular.utils import extend_schema
@@ -35,9 +37,24 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
-        """Endpoint para obtener información del usuario actual"""
-        serializer = self.get_serializer(request.user)
+        """Endpoint para obtener/actualizar información del usuario actual"""
+        serializer = UserMeSerializer(request.user)
         return Response(serializer.data)
+
+    @me.mapping.patch
+    def me_patch(self, request):
+        serializer = UserMeSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], url_path='me/change-password', permission_classes=[permissions.IsAuthenticated])
+    def change_my_password(self, request):
+        serializer = UserMePasswordSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        request.user.set_password(serializer.validated_data["new_password"])
+        request.user.save()
+        return Response({"detail": "Contraseña actualizada correctamente."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=['Groups'])

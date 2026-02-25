@@ -36,6 +36,26 @@ class UserManagementSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "date_joined"]
 
 
+class UserMeSerializer(serializers.ModelSerializer):
+    """Serializer para perfil propio"""
+    class Meta:
+        model = User
+        fields = ["id", "username", "email", "first_name", "last_name", "is_staff", "is_active"]
+        read_only_fields = ["id", "username", "is_staff", "is_active"]
+
+
+class UserMePasswordSerializer(serializers.Serializer):
+    """Serializer para cambio de contraseña del usuario actual"""
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate_old_password(self, value):
+        user = self.context["request"].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("La contraseña actual no es correcta.")
+        return value
+
+
 class GroupSerializer(serializers.ModelSerializer):
     """Serializer para gestión de grupos"""
     permissions = serializers.SerializerMethodField(read_only=True)

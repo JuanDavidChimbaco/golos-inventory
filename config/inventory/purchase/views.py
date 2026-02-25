@@ -22,6 +22,7 @@ from ..core.services import (
     create_supplier_return,
     daily_inventory_summary
 )
+from ..core.api_responses import error_response, success_response
 
 @extend_schema(tags=['Purchase'])
 class PurchaseViewSet(viewsets.ModelViewSet):
@@ -92,13 +93,22 @@ class PurchaseViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_201_CREATED
             )
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail=str(e),
+                code='PURCHASE_CREATE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
     
     @action(detail=False, methods=['post'])
     def bulk_purchase(self, request):
         serializer = BulkPurchaseSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail='Datos invalidos para compra masiva',
+                code='VALIDATION_ERROR',
+                http_status=status.HTTP_400_BAD_REQUEST,
+                errors=[str(serializer.errors)],
+            )
         
         try:
             movements = []
@@ -118,12 +128,18 @@ class PurchaseViewSet(viewsets.ModelViewSet):
                     movement.save()
                 movements.append(movement)
             
-            return Response({
-                'message': f'Se crearon {len(movements)} compras',
-                'purchases': PurchaseDetailSerializer(movements, many=True).data
-            }, status=status.HTTP_201_CREATED)
+            return success_response(
+                detail=f'Se crearon {len(movements)} compras',
+                code='BULK_PURCHASE_CREATED',
+                http_status=status.HTTP_201_CREATED,
+                purchases=PurchaseDetailSerializer(movements, many=True).data,
+            )
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail=str(e),
+                code='BULK_PURCHASE_CREATE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
     
     @action(detail=False, methods=['get'])
     def purchase_stats(self, request):
@@ -147,7 +163,11 @@ class PurchaseViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def supplier_purchases(self, request):
         if not (supplier_id := request.query_params.get('supplier_id')):
-            return Response({'error': 'Se requiere supplier_id'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail='Se requiere supplier_id',
+                code='MISSING_SUPPLIER_ID',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
         
         try:
             supplier = Supplier.objects.get(id=supplier_id)
@@ -163,7 +183,11 @@ class PurchaseViewSet(viewsets.ModelViewSet):
                 }
             })
         except Supplier.DoesNotExist:
-            return Response({'error': 'Proveedor no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(
+                detail='Proveedor no encontrado',
+                code='SUPPLIER_NOT_FOUND',
+                http_status=status.HTTP_404_NOT_FOUND,
+            )
     
     @action(detail=True, methods=['post'])
     def reverse_purchase(self, request, pk=None):
@@ -179,9 +203,15 @@ class PurchaseViewSet(viewsets.ModelViewSet):
                 user=request.user
             )
             
-            return Response({
-                'message': 'Compra revertida',
-                'return_movement': PurchaseDetailSerializer(return_movement).data
-            }, status=status.HTTP_201_CREATED)
+            return success_response(
+                detail='Compra revertida',
+                code='PURCHASE_REVERSED',
+                http_status=status.HTTP_201_CREATED,
+                return_movement=PurchaseDetailSerializer(return_movement).data,
+            )
         except Exception as e:
-            return Response({'error': f'Error: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                detail=str(e),
+                code='PURCHASE_REVERSE_FAILED',
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )

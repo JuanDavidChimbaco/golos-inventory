@@ -195,6 +195,33 @@ python -c "from inventory.scripts.ecommerce_integration import *; help(ECommerce
 
 ---
 
+## Contrato Estandar de Respuestas
+
+### Exito
+```json
+{
+  "detail": "Operacion realizada correctamente",
+  "code": "OPERATION_OK",
+  "...": "datos del endpoint"
+}
+```
+
+### Error
+```json
+{
+  "detail": "Mensaje principal",
+  "code": "VALIDATION_ERROR",
+  "errors": ["detalle 1", "detalle 2"]
+}
+```
+
+### Notas
+- `detail` es obligatorio en exito y error.
+- `code` usa convención `UPPER_SNAKE_CASE`.
+- `errors` siempre es lista cuando la respuesta es de error.
+
+---
+
 ## 📚 **Documentación Adicional**
 
 - `docs/ARCHITECTURE.md` - Arquitectura detallada

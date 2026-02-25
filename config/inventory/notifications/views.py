@@ -12,6 +12,7 @@ from ..models import (
     ProductVariant, MovementInventory, Product, Supplier
 )
 from ..core.services import low_stock_variants
+from ..core.api_responses import success_response
 
 
 class NotificationViewSet(viewsets.GenericViewSet):
@@ -82,17 +83,19 @@ class NotificationViewSet(viewsets.GenericViewSet):
                     'message': 'Stock cercano al mínimo - Considerar reposición'
                 })
         
-        return Response({
-            'total_alerts': len(critical) + len(warning) + len(info),
-            'critical': critical,
-            'warning': warning,
-            'info': info,
-            'summary': {
+        return success_response(
+            detail='Alertas de stock bajo obtenidas correctamente',
+            code='NOTIFICATIONS_LOW_STOCK_ALERTS_OK',
+            total_alerts=len(critical) + len(warning) + len(info),
+            critical=critical,
+            warning=warning,
+            info=info,
+            summary={
                 'critical_count': len(critical),
                 'warning_count': len(warning),
                 'info_count': len(info)
-            }
-        })
+            },
+        )
     
     @extend_schema(tags=['Notifications'])
     @action(detail=False, methods=['get'])
@@ -132,9 +135,11 @@ class NotificationViewSet(viewsets.GenericViewSet):
         
         sales_change = ((today_sales - yesterday_sales) / yesterday_sales * 100) if yesterday_sales > 0 else 0
         
-        return Response({
-            'date': today.strftime('%Y-%m-%d'),
-            'activities': {
+        return success_response(
+            detail='Resumen diario obtenido correctamente',
+            code='NOTIFICATIONS_DAILY_SUMMARY_OK',
+            date=today.strftime('%Y-%m-%d'),
+            activities={
                 'sales': {
                     'today': today_sales,
                     'yesterday': yesterday_sales,
@@ -144,8 +149,8 @@ class NotificationViewSet(viewsets.GenericViewSet):
                 'new_products': today_products,
                 'adjustments': today_adjustments
             },
-            'alerts_count': low_stock_variants().count()
-        })
+            alerts_count=low_stock_variants().count(),
+        )
     
     @extend_schema(tags=['Notifications'])
     @action(detail=False, methods=['get'])
@@ -185,11 +190,13 @@ class NotificationViewSet(viewsets.GenericViewSet):
             reverse=True
         )
         
-        return Response({
-            'recommendations': recommendations[:10],  # Top 10
-            'total_suppliers': len(recommendations),
-            'total_variants_needed': len(low_stock)
-        })
+        return success_response(
+            detail='Recomendaciones de proveedores obtenidas correctamente',
+            code='NOTIFICATIONS_SUPPLIER_RECOMMENDATIONS_OK',
+            recommendations=recommendations[:10],  # Top 10
+            total_suppliers=len(recommendations),
+            total_variants_needed=len(low_stock),
+        )
     
     @extend_schema(tags=['Notifications'])
     @action(detail=False, methods=['get'])
@@ -271,16 +278,18 @@ class NotificationViewSet(viewsets.GenericViewSet):
                 }
             })
         
-        return Response({
-            'total_anomalies': len(anomalies),
-            'period_days': days,
-            'anomalies': anomalies,
-            'summary': {
+        return success_response(
+            detail='Anomalias de movimientos obtenidas correctamente',
+            code='NOTIFICATIONS_MOVEMENT_ANOMALIES_OK',
+            total_anomalies=len(anomalies),
+            period_days=days,
+            anomalies=anomalies,
+            summary={
                 'high_quantity': len([a for a in anomalies if a['type'] == 'high_quantity']),
                 'frequent_adjustments': len([a for a in anomalies if a['type'] == 'frequent_adjustments']),
                 'high_returns': len([a for a in anomalies if a['type'] == 'high_return'])
-            }
-        })
+            },
+        )
     
     @extend_schema(tags=['Notifications'])
     @action(detail=False, methods=['get'])
@@ -321,9 +330,11 @@ class NotificationViewSet(viewsets.GenericViewSet):
         
         return_rate = (abs(returns) / sales_out * 100) if sales_out > 0 else 0
         
-        return Response({
-            'period': 'Últimos 30 días',
-            'metrics': {
+        return success_response(
+            detail='Metricas de rendimiento obtenidas correctamente',
+            code='NOTIFICATIONS_PERFORMANCE_METRICS_OK',
+            period='Últimos 30 días',
+            metrics={
                 'inventory_rotation': {
                     'value': round(rotation_rate, 2),
                     'description': 'Porcentaje de productos con movimiento',
@@ -340,12 +351,12 @@ class NotificationViewSet(viewsets.GenericViewSet):
                     'status': 'good' if return_rate < 5 else 'warning' if return_rate < 15 else 'critical'
                 }
             },
-            'summary': {
+            summary={
                 'total_products': total_products,
                 'sold_products': sold_products,
                 'total_movements': total_movements,
                 'adjustments': adjustments,
                 'sales_quantity': sales_out,
                 'returns_quantity': abs(returns)
-            }
-        })
+            },
+        )

@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError
 from ..models import MovementInventory, InventorySnapshot
 from ..core.services import daily_inventory_summary, create_adjustment, close_inventory_month
+from ..core.api_responses import error_response, success_response
 from .serializers import (
     MovementInventorySerializer,
     InventoryHistorySerializer,
@@ -163,15 +164,32 @@ class InventoryCloseMonthView(APIView):
     def post(self, request):
         month = request.data.get("month")  # "2026-01-01"
         if not month:
-            raise ValidationError("month es requerido")
+            return error_response(
+                detail="month es requerido",
+                code="MISSING_MONTH",
+            )
 
         # Parse month to year and month integers
-        year = int(month.split('-')[0])
-        month_num = int(month.split('-')[1])
+        try:
+            parts = str(month).split("-")
+            if len(parts) < 2:
+                raise ValueError("Formato inválido")
+            year = int(parts[0])
+            month_num = int(parts[1])
+            if month_num < 1 or month_num > 12:
+                raise ValueError("Mes fuera de rango")
+        except (TypeError, ValueError):
+            return error_response(
+                detail="Formato de month inválido. Usa YYYY-MM-DD",
+                code="INVALID_MONTH_FORMAT",
+            )
 
         close_inventory_month(year=year, month=month_num)
 
-        return Response({"status": "month closed"})
+        return success_response(
+            detail="Mes cerrado correctamente",
+            code="MONTH_CLOSED",
+        )
 
 
 @extend_schema(tags=['InventoryAdjustments'])

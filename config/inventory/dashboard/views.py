@@ -14,6 +14,7 @@ from ..models import (
     Product
 )
 from ..core.services import low_stock_variants
+from ..core.api_responses import success_response
 
 
 class DashboardViewSet(viewsets.GenericViewSet):
@@ -41,14 +42,14 @@ class DashboardViewSet(viewsets.GenericViewSet):
         pending_sales = Sale.objects.filter(status='pending').count()
         
         # Ventas del último mes
-        recent_sales = Sale.objects.filter(created_at__gte=last_month)
+        recent_sales = Sale.objects.filter(created_at__date__gte=last_month)
         recent_sales_count = recent_sales.count()
         recent_sales_total = recent_sales.aggregate(
             total=Coalesce(Sum('total'), 0, output_field=DecimalField())
         )['total'] or 0
         
         # Ventas de la última semana
-        weekly_sales = Sale.objects.filter(created_at__gte=last_week)
+        weekly_sales = Sale.objects.filter(created_at__date__gte=last_week)
         weekly_sales_count = weekly_sales.count()
         weekly_sales_total = weekly_sales.aggregate(
             total=Coalesce(Sum('total'), 0, output_field=DecimalField())
@@ -57,7 +58,7 @@ class DashboardViewSet(viewsets.GenericViewSet):
         # Estadísticas de compras
         purchases = MovementInventory.objects.filter(
             movement_type=MovementInventory.MovementType.PURCHASE,
-            created_at__gte=last_month
+            created_at__date__gte=last_month
         )
         purchases_count = purchases.count()
         purchases_total_quantity = purchases.aggregate(
@@ -80,14 +81,16 @@ class DashboardViewSet(viewsets.GenericViewSet):
             variant.current_stock * variant.cost for variant in variants_with_stock
         )
         
-        return Response({
-            'products': {
+        return success_response(
+            detail='Resumen del dashboard obtenido correctamente',
+            code='DASHBOARD_OVERVIEW_OK',
+            products={
                 'total': total_products,
                 'active_variants': active_variants,
                 'low_stock': low_stock_count,
                 'inventory_value': inventory_value
             },
-            'sales': {
+            sales={
                 'total': total_sales,
                 'completed': completed_sales,
                 'pending': pending_sales,
@@ -100,18 +103,18 @@ class DashboardViewSet(viewsets.GenericViewSet):
                     'total': weekly_sales_total
                 }
             },
-            'purchases': {
+            purchases={
                 'recent_month': {
                     'count': purchases_count,
                     'total_quantity': purchases_total_quantity
                 }
             },
-            'suppliers': {
+            suppliers={
                 'total': total_suppliers,
                 'active': active_suppliers,
                 'with_purchases': suppliers_with_purchases
-            }
-        })
+            },
+        )
     
     @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
@@ -147,11 +150,13 @@ class DashboardViewSet(viewsets.GenericViewSet):
                 'cost': variant.cost
             })
         
-        return Response({
-            'count': len(data),
-            'threshold': threshold,
-            'products': data
-        })
+        return success_response(
+            detail='Productos con stock bajo obtenidos correctamente',
+            code='DASHBOARD_LOW_STOCK_OK',
+            count=len(data),
+            threshold=threshold,
+            products=data,
+        )
     
     @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
@@ -185,10 +190,12 @@ class DashboardViewSet(viewsets.GenericViewSet):
                 'created_by': movement.created_by
             })
         
-        return Response({
-            'count': len(data),
-            'movements': data
-        })
+        return success_response(
+            detail='Movimientos recientes obtenidos correctamente',
+            code='DASHBOARD_RECENT_MOVEMENTS_OK',
+            count=len(data),
+            movements=data,
+        )
     
     @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
@@ -226,15 +233,17 @@ class DashboardViewSet(viewsets.GenericViewSet):
             total_quantity=Coalesce(Sum('quantity'), 0, output_field=DecimalField())
         ).order_by('day')
         
-        return Response({
-            'sales': list(sales_data),
-            'purchases': list(purchases_data),
-            'period': {
+        return success_response(
+            detail='Datos del grafico de ventas obtenidos correctamente',
+            code='DASHBOARD_SALES_CHART_OK',
+            sales=list(sales_data),
+            purchases=list(purchases_data),
+            period={
                 'start_date': start_date,
                 'end_date': timezone.now().date(),
                 'days': days
-            }
-        })
+            },
+        )
     
     @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
@@ -271,11 +280,13 @@ class DashboardViewSet(viewsets.GenericViewSet):
             total_quantity=Coalesce(Sum('quantity'), 0, output_field=DecimalField())
         ).order_by('-total_revenue')[:10]
         
-        return Response({
-            'by_quantity': list(top_products),
-            'by_revenue': list(top_revenue),
-            'period': period
-        })
+        return success_response(
+            detail='Top de productos obtenido correctamente',
+            code='DASHBOARD_TOP_PRODUCTS_OK',
+            by_quantity=list(top_products),
+            by_revenue=list(top_revenue),
+            period=period,
+        )
     
     @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
@@ -315,8 +326,10 @@ class DashboardViewSet(viewsets.GenericViewSet):
                 'is_active': supplier.is_active
             })
         
-        return Response({
-            'count': len(data),
-            'period': f'Últimos {days} días',
-            'suppliers': data
-        })
+        return success_response(
+            detail='Rendimiento de proveedores obtenido correctamente',
+            code='DASHBOARD_SUPPLIER_PERFORMANCE_OK',
+            count=len(data),
+            period=f'Últimos {days} días',
+            suppliers=data,
+        )
