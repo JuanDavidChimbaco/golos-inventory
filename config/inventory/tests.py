@@ -712,3 +712,22 @@ class ApiErrorContractTest(APITestCase):
         self.assertIn("code", response.data)
         self.assertEqual(response.data["code"], "NOTIFICATIONS_LOW_STOCK_ALERTS_OK")
         self.assertIn("summary", response.data)
+
+    def test_notifications_supplier_recommendations_success_returns_standard_success_contract(self):
+        supplier = Supplier.objects.create(
+            name="Proveedor Recomendado",
+            nit="900765432-1",
+            phone="3001112233",
+            created_by=self.user.username,
+            is_active=True,
+        )
+        supplier.preferred_products.add(self.product)
+
+        url = reverse("notifications-supplier-recommendations")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("detail", response.data)
+        self.assertIn("code", response.data)
+        self.assertEqual(response.data["code"], "NOTIFICATIONS_SUPPLIER_RECOMMENDATIONS_OK")
+        self.assertIn("recommendations", response.data)

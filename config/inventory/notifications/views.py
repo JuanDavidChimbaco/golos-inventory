@@ -1,13 +1,12 @@
 """
 Views para sistema de notificaciones
 """
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count
 from django.utils import timezone
-from datetime import datetime, timedelta
+from datetime import timedelta
 from ..models import (
     ProductVariant, MovementInventory, Product, Supplier
 )
@@ -158,30 +157,35 @@ class NotificationViewSet(viewsets.GenericViewSet):
         """Recomendaciones de proveedores basadas en stock bajo"""
         low_stock = low_stock_variants()
         
-        # Agrupar por proveedores preferidos
+        # Agrupar por proveedores preferidos (relación real: Supplier.preferred_products)
         supplier_recommendations = {}
         
         for variant in low_stock:
             product = variant.product
-            
-            # Si el producto tiene proveedores preferidos
-            if product.preferred_products:
-                for supplier_name in product.preferred_products:
-                    if supplier_name not in supplier_recommendations:
-                        supplier_recommendations[supplier_name] = {
-                            'supplier_name': supplier_name,
-                            'products_needed': [],
-                            'total_variants': 0
-                        }
-                    
-                    supplier_recommendations[supplier_name]['products_needed'].append({
-                        'product_name': product.name,
-                        'variant_info': f"{variant.get_gender_display()} - {variant.color} - {variant.size}",
-                        'current_stock': variant.stock,
-                        'stock_minimum': variant.stock_minimum,
-                        'recommended_quantity': variant.stock_minimum - variant.stock
-                    })
-                    supplier_recommendations[supplier_name]['total_variants'] += 1
+
+            suppliers = Supplier.objects.filter(
+                preferred_products=product,
+                is_active=True,
+            ).distinct()
+
+            for supplier in suppliers:
+                supplier_name = supplier.name
+                if supplier_name not in supplier_recommendations:
+                    supplier_recommendations[supplier_name] = {
+                        'supplier_name': supplier_name,
+                        'supplier_id': supplier.id,
+                        'products_needed': [],
+                        'total_variants': 0
+                    }
+
+                supplier_recommendations[supplier_name]['products_needed'].append({
+                    'product_name': product.name,
+                    'variant_info': f"{variant.get_gender_display()} - {variant.color} - {variant.size}",
+                    'current_stock': variant.stock,
+                    'stock_minimum': variant.stock_minimum,
+                    'recommended_quantity': max(0, variant.stock_minimum - variant.stock)
+                })
+                supplier_recommendations[supplier_name]['total_variants'] += 1
         
         # Ordenar por cantidad de variantes necesitadas
         recommendations = sorted(
