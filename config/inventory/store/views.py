@@ -6,10 +6,12 @@ from __future__ import annotations
 
 from decimal import Decimal
 import hashlib
+import logging
 from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth.models import Group, User
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
@@ -20,7 +22,18 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from ..core.api_responses import error_response, success_response
-from ..models import AuditLog, Product, ProductImage, ProductVariant, Sale, SaleDetail, StoreBranding
+from ..models import (
+    AuditLog,
+    MovementInventory,
+    Product,
+    ProductImage,
+    ProductVariant,
+    Sale,
+    SaleDetail,
+    Shipment,
+    ShipmentEvent,
+    StoreBranding,
+)
 from .serializers import (
     StoreBrandingSerializer,
     StoreBrandingUpdateSerializer,
@@ -28,9 +41,13 @@ from .serializers import (
     StoreCheckoutSerializer,
     StoreCustomerLoginSerializer,
     StoreCustomerRegisterSerializer,
+    StoreOpsManualShipmentSerializer,
     StoreProductSerializer,
 )
+from .shipping import ShippingProviderError, create_shipment_for_sale, is_valid_shipping_webhook_signature
 from .wompi import WompiError, amount_to_cents, build_checkout_url, extract_event_signature_payload, get_transaction
+
+logger = logging.getLogger(__name__)
 
 
 ORDER_STATUS_META = {
@@ -62,6 +79,103 @@ DEFAULT_STORE_BRANDING = {
 }
 
 CUSTOMER_GROUP_NAME = "Customers"
+
+
+def _to_decimal(value: object, default: str = "0") -> Decimal:
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return Decimal(default)
+
+
+def _parse_shipping_cost_matrix(raw_value: str) -> list[tuple[str, int, Decimal]]:
+    """
+    Formato esperado:
+    zone:max_weight_grams:cost,zone:max_weight_grams:cost
+    Ejemplo:
+    local:2000:9000,regional:2000:12000,national:2000:16000
+    """
+    rows: list[tuple[str, int, Decimal]] = []
+    for chunk in (raw_value or "").split(","):
+        token = chunk.strip()
+        if not token:
+            continue
+        parts = [p.strip().lower() for p in token.split(":")]
+        if len(parts) != 3:
+            continue
+        zone, max_weight_raw, cost_raw = parts
+        if zone not in {"local", "regional", "national"}:
+            continue
+        try:
+            max_weight = int(max_weight_raw)
+        except (TypeError, ValueError):
+            continue
+        rows.append((zone, max(max_weight, 1), _to_decimal(cost_raw)))
+    return sorted(rows, key=lambda row: (row[0], row[1]))
+
+
+def _estimate_shipping_cost(shipping_zone: str, estimated_weight_grams: int) -> Decimal:
+    matrix = _parse_shipping_cost_matrix(getattr(settings, "STORE_MARGIN_SHIPPING_COST_MATRIX", ""))
+    normalized_zone = shipping_zone if shipping_zone in {"local", "regional", "national"} else "regional"
+    normalized_weight = max(int(estimated_weight_grams), 1)
+    for zone, max_weight, cost in matrix:
+        if zone == normalized_zone and normalized_weight <= max_weight:
+            return cost
+    return _to_decimal(getattr(settings, "STORE_MARGIN_DEFAULT_SHIPPING_COST", "0"))
+
+
+def _build_commercial_summary(
+    normalized_items: list[dict],
+    *,
+    shipping_zone: str,
+    estimated_weight_grams: int | None,
+) -> dict:
+    gross_total = sum((item["subtotal"] for item in normalized_items), start=Decimal("0.00"))
+    product_cost_total = sum(
+        (_to_decimal(getattr(item["variant"], "cost", 0)) * item["quantity"] for item in normalized_items),
+        start=Decimal("0.00"),
+    )
+
+    items_count = sum((item["quantity"] for item in normalized_items), start=0)
+    default_weight_per_item = int(getattr(settings, "STORE_MARGIN_DEFAULT_WEIGHT_PER_ITEM_GRAMS", 900))
+    resolved_weight_grams = max(estimated_weight_grams or (items_count * max(default_weight_per_item, 1)), 1)
+    resolved_zone = shipping_zone if shipping_zone in {"local", "regional", "national"} else "regional"
+
+    wompi_rate_percent = _to_decimal(getattr(settings, "STORE_MARGIN_WOMPI_PERCENT", "2.65"))
+    wompi_fixed_fee = _to_decimal(getattr(settings, "STORE_MARGIN_WOMPI_FIXED_FEE", "0"))
+    wompi_vat_percent = _to_decimal(getattr(settings, "STORE_MARGIN_WOMPI_VAT_PERCENT", "19"))
+    packaging_cost = _to_decimal(getattr(settings, "STORE_MARGIN_PACKAGING_COST", "0"))
+    risk_percent = _to_decimal(getattr(settings, "STORE_MARGIN_RISK_PERCENT", "0"))
+
+    wompi_fee_before_vat = (gross_total * wompi_rate_percent / Decimal("100")) + wompi_fixed_fee
+    wompi_fee_total = wompi_fee_before_vat * (Decimal("1") + (wompi_vat_percent / Decimal("100")))
+    shipping_estimate = _estimate_shipping_cost(resolved_zone, resolved_weight_grams)
+    risk_cost = gross_total * (risk_percent / Decimal("100"))
+
+    variable_cost_total = product_cost_total + wompi_fee_total + shipping_estimate + packaging_cost + risk_cost
+    projected_profit = gross_total - variable_cost_total
+    projected_margin_percent = Decimal("0")
+    if gross_total > 0:
+        projected_margin_percent = (projected_profit / gross_total) * Decimal("100")
+
+    min_margin_percent = _to_decimal(getattr(settings, "STORE_MARGIN_MIN_PERCENT", "0"))
+    is_viable_online = projected_margin_percent >= min_margin_percent and projected_profit >= 0
+
+    return {
+        "shipping_zone": resolved_zone,
+        "estimated_weight_grams": resolved_weight_grams,
+        "gross_total": str(gross_total.quantize(Decimal("0.01"))),
+        "product_cost_total": str(product_cost_total.quantize(Decimal("0.01"))),
+        "payment_fee_total": str(wompi_fee_total.quantize(Decimal("0.01"))),
+        "shipping_estimate": str(shipping_estimate.quantize(Decimal("0.01"))),
+        "packaging_cost": str(packaging_cost.quantize(Decimal("0.01"))),
+        "risk_cost": str(risk_cost.quantize(Decimal("0.01"))),
+        "variable_cost_total": str(variable_cost_total.quantize(Decimal("0.01"))),
+        "projected_profit": str(projected_profit.quantize(Decimal("0.01"))),
+        "projected_margin_percent": str(projected_margin_percent.quantize(Decimal("0.01"))),
+        "min_margin_percent": str(min_margin_percent.quantize(Decimal("0.01"))),
+        "is_viable_online": is_viable_online,
+    }
 
 
 def _store_products_queryset():
@@ -110,6 +224,13 @@ def _parse_positive_int(value: str | None, default: int, max_value: int) -> int:
     return min(parsed, max_value)
 
 
+def _resolve_image_url(image_field) -> str | None:
+    try:
+        return image_field.url
+    except Exception:
+        return getattr(image_field, "name", None)
+
+
 def _serialize_sale_items(sale: Sale) -> list[dict]:
     details = sale.details.select_related("variant__product").all()
     return [
@@ -123,6 +244,24 @@ def _serialize_sale_items(sale: Sale) -> list[dict]:
         }
         for detail in details
     ]
+
+
+def _serialize_latest_shipment(sale: Sale) -> dict | None:
+    shipment = sale.shipments.order_by("-created_at").first()
+    if not shipment:
+        return None
+    return {
+        "id": shipment.id,
+        "carrier": shipment.carrier,
+        "service": shipment.service,
+        "tracking_number": shipment.tracking_number,
+        "provider_reference": shipment.provider_reference,
+        "label_url": shipment.label_url,
+        "status": shipment.status,
+        "shipping_cost": str(shipment.shipping_cost),
+        "currency": shipment.currency,
+        "created_at": shipment.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+    }
 
 
 def _status_detail(status_code: str) -> dict:
@@ -168,6 +307,7 @@ def _serialize_store_order(sale: Sale) -> dict:
         "status_detail": _status_detail(sale.status),
         "payment_status": sale.payment_status,
         "payment_method": sale.payment_method,
+        "payment_method_preference": sale.payment_method_preference,
         "payment_reference": sale.payment_reference,
         "is_order": sale.is_order,
         "total": str(sale.total),
@@ -175,7 +315,44 @@ def _serialize_store_order(sale: Sale) -> dict:
         "updated_at": sale.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
         "items": _serialize_sale_items(sale),
         "timeline": _order_timeline(sale),
+        "shipment": _serialize_latest_shipment(sale),
+        "shipping_address": sale.shipping_address or {},
     }
+
+
+def _ensure_shipment_for_paid_order(sale: Sale, *, source: str) -> None:
+    if not getattr(settings, "STORE_SHIPPING_ENABLED", True):
+        return
+    if not getattr(settings, "STORE_SHIPPING_AUTO_CREATE", True):
+        return
+    if sale.status != "paid":
+        return
+
+    try:
+        shipment = create_shipment_for_sale(sale, source=source)
+    except ShippingProviderError as exc:
+        logger.warning("No se pudo crear guia para orden %s: %s", sale.id, exc)
+        AuditLog.objects.create(
+            action="store_order_shipment_create_failed",
+            entity="sale",
+            entity_id=sale.id,
+            performed_by=source,
+            extra_data={"error": str(exc)},
+        )
+        return
+
+    AuditLog.objects.create(
+        action="store_order_shipment_created",
+        entity="shipment",
+        entity_id=shipment.id,
+        performed_by=source,
+        extra_data={
+            "sale_id": sale.id,
+            "carrier": shipment.carrier,
+            "service": shipment.service,
+            "tracking_number": shipment.tracking_number,
+        },
+    )
 
 
 def _serialize_store_user(user: User) -> dict:
@@ -204,6 +381,65 @@ def _ensure_store_wompi_ready() -> str | None:
     return None
 
 
+def _ensure_store_order_inventory_discounted(sale: Sale, *, source: str) -> None:
+    if not sale.is_order:
+        return
+
+    existing_movement = MovementInventory.objects.filter(
+        sale=sale,
+        movement_type=MovementInventory.MovementType.SALE_OUT,
+    ).exists()
+    if existing_movement:
+        return
+
+    details = list(sale.details.select_related("variant__product").all())
+    if not details:
+        raise ValidationError("La orden no tiene items para descontar inventario")
+
+    variant_ids = [detail.variant_id for detail in details]
+    variants = (
+        ProductVariant.objects.select_for_update()
+        .filter(id__in=variant_ids)
+        .select_related("product")
+    )
+    variants_by_id = {variant.id: variant for variant in variants}
+
+    movements_to_create: list[MovementInventory] = []
+    for detail in details:
+        variant = variants_by_id.get(detail.variant_id)
+        if not variant:
+            raise ValidationError(f"No existe la variante {detail.variant_id} para descontar inventario")
+        if variant.is_deleted:
+            raise ValidationError(f"La variante {variant.id} esta eliminada y no puede descontarse")
+        if variant.stock < detail.quantity:
+            raise ValidationError(
+                f"Stock insuficiente para {variant.product.name}. "
+                f"Disponible: {variant.stock}, Requerido: {detail.quantity}"
+            )
+
+        movements_to_create.append(
+            MovementInventory(
+                variant=variant,
+                sale=sale,
+                movement_type=MovementInventory.MovementType.SALE_OUT,
+                quantity=-detail.quantity,
+                observation=f"Salida por orden tienda #{sale.id}",
+                created_by=source,
+            )
+        )
+
+    MovementInventory.objects.bulk_create(movements_to_create)
+    AuditLog.objects.create(
+        action="store_order_inventory_discounted",
+        entity="sale",
+        entity_id=sale.id,
+        performed_by=source,
+        extra_data={
+            "movement_count": len(movements_to_create),
+        },
+    )
+
+
 def _apply_wompi_transaction_to_sale(sale: Sale, transaction_data: dict, source: str = "wompi_verify") -> None:
     status_map = {
         "APPROVED": ("paid", "paid"),
@@ -225,11 +461,10 @@ def _apply_wompi_transaction_to_sale(sale: Sale, transaction_data: dict, source:
         sale.payment_status = payment_status
         fields_to_update.append("payment_status")
 
-    method = (
-        transaction_data.get("payment_method_type")
-        or transaction_data.get("payment_method", {}).get("type")
-        or sale.payment_method
-    )
+    payment_method_data = transaction_data.get("payment_method")
+    if not isinstance(payment_method_data, dict):
+        payment_method_data = {}
+    method = transaction_data.get("payment_method_type") or payment_method_data.get("type") or sale.payment_method
     if method and sale.payment_method != method:
         sale.payment_method = method
         fields_to_update.append("payment_method")
@@ -242,6 +477,19 @@ def _apply_wompi_transaction_to_sale(sale: Sale, transaction_data: dict, source:
         fields_to_update.append("canceled_at")
 
     sale.save(update_fields=list(dict.fromkeys(fields_to_update)))
+    if sale.status == "paid" and sale.payment_status == "paid":
+        try:
+            _ensure_store_order_inventory_discounted(sale, source=source)
+        except ValidationError as exc:
+            logger.warning("No se pudo descontar inventario para la orden %s: %s", sale.id, exc)
+            AuditLog.objects.create(
+                action="store_order_inventory_discount_failed",
+                entity="sale",
+                entity_id=sale.id,
+                performed_by=source,
+                extra_data={"error": str(exc)},
+            )
+        _ensure_shipment_for_paid_order(sale, source=source)
 
     AuditLog.objects.create(
         action="wompi_transaction_sync",
@@ -520,6 +768,25 @@ class StoreCartValidateView(APIView):
             )
 
         normalized_items = serializer.validated_data["items"]
+        shipping_zone = serializer.validated_data.get("shipping_zone", "regional")
+        estimated_weight_grams = serializer.validated_data.get("estimated_weight_grams")
+        variant_ids = {item["variant"].id for item in normalized_items}
+        product_ids = {item["variant"].product_id for item in normalized_items}
+        images = ProductImage.objects.filter(product_id__in=product_ids).filter(
+            Q(variant_id__in=variant_ids) | Q(variant__isnull=True)
+        ).order_by("-is_primary", "id")
+
+        variant_image_map: dict[int, str] = {}
+        product_image_map: dict[int, str] = {}
+        for image in images:
+            image_url = _resolve_image_url(image.image)
+            if not image_url:
+                continue
+            if image.variant_id and image.variant_id not in variant_image_map:
+                variant_image_map[image.variant_id] = image_url
+            if image.variant_id is None and image.product_id not in product_image_map:
+                product_image_map[image.product_id] = image_url
+
         items = [
             {
                 "variant_id": item["variant"].id,
@@ -529,16 +796,26 @@ class StoreCartValidateView(APIView):
                 "unit_price": str(item["unit_price"]),
                 "subtotal": str(item["subtotal"]),
                 "available_stock": item["available_stock"],
+                "image_url": (
+                    variant_image_map.get(item["variant"].id)
+                    or product_image_map.get(item["variant"].product_id)
+                ),
             }
             for item in normalized_items
         ]
         total = sum((item["subtotal"] for item in normalized_items), start=Decimal("0.00"))
+        commercial = _build_commercial_summary(
+            normalized_items,
+            shipping_zone=shipping_zone,
+            estimated_weight_grams=estimated_weight_grams,
+        )
 
         return success_response(
             detail="Carrito validado correctamente",
             code="STORE_CART_VALID",
             items=items,
             total=str(total),
+            commercial=commercial,
         )
 
 
@@ -549,11 +826,13 @@ class StoreCheckoutView(APIView):
     @transaction.atomic
     def post(self, request):
         payload = dict(request.data)
+        payload_shipping_address = payload.get("shipping_address") if isinstance(payload.get("shipping_address"), dict) else {}
+        shipping_phone = str(payload_shipping_address.get("recipient_phone") or "").strip()
         fallback_name = (
             f"{request.user.first_name} {request.user.last_name}".strip()
             or request.user.username
         )
-        fallback_contact = (request.user.email or request.user.username or "").strip()
+        fallback_contact = shipping_phone or (request.user.email or request.user.username or "").strip()
         payload["customer_name"] = (payload.get("customer_name") or "").strip() or fallback_name
         payload["customer_contact"] = (payload.get("customer_contact") or "").strip() or fallback_contact
 
@@ -573,13 +852,29 @@ class StoreCheckoutView(APIView):
             customer = f"{customer} ({contact})"
 
         items = validated["items"]
+        shipping_address = validated["shipping_address"]
+        shipping_zone = validated.get("shipping_zone", "regional")
+        estimated_weight_grams = validated.get("estimated_weight_grams")
         total = sum((item["subtotal"] for item in items), start=Decimal("0.00"))
+        commercial = _build_commercial_summary(
+            items,
+            shipping_zone=shipping_zone,
+            estimated_weight_grams=estimated_weight_grams,
+        )
+        if getattr(settings, "STORE_MARGIN_GUARD_ENABLED", False) and not commercial["is_viable_online"]:
+            return error_response(
+                detail="El pedido no cumple el margen minimo para venta online con la configuracion actual.",
+                code="STORE_MARGIN_GUARD_BLOCKED",
+                http_status=status.HTTP_409_CONFLICT,
+                commercial=commercial,
+            )
 
         created_by = request.user.username
 
         sale = Sale.objects.create(
             customer=customer,
             created_by=created_by,
+            shipping_address=shipping_address,
             is_order=validated.get("is_order", True),
             total=total,
             status="pending",
@@ -610,6 +905,7 @@ class StoreCheckoutView(APIView):
                 "total": str(total),
                 "items_count": len(sale_details),
             },
+            commercial=commercial,
         )
 
 
@@ -630,8 +926,6 @@ class StoreOrderStatusView(APIView):
         sale_qs = Sale.objects.prefetch_related("details__variant__product").filter(id=sale_id)
         if request.user.is_authenticated:
             sale_qs = sale_qs.filter(Q(created_by="store_api") | Q(created_by=request.user.username))
-        else:
-            sale_qs = sale_qs.filter(created_by="store_api")
         sale = sale_qs.first()
         if not sale:
             return error_response(
@@ -680,8 +974,6 @@ class StoreOrderLookupView(APIView):
         queryset = Sale.objects.prefetch_related("details__variant__product").filter(is_order=True)
         if request.user.is_authenticated:
             queryset = queryset.filter(Q(created_by="store_api") | Q(created_by=request.user.username))
-        else:
-            queryset = queryset.filter(created_by="store_api")
 
         if sale_id_raw:
             try:
@@ -734,8 +1026,6 @@ class StoreOrderPaymentView(APIView):
         sale_qs = Sale.objects.select_for_update().filter(id=sale_id)
         if request.user.is_authenticated:
             sale_qs = sale_qs.filter(Q(created_by="store_api") | Q(created_by=request.user.username))
-        else:
-            sale_qs = sale_qs.filter(created_by="store_api")
         sale = sale_qs.first()
         if not sale:
             return error_response(
@@ -776,10 +1066,19 @@ class StoreOrderPaymentView(APIView):
         if not sale.payment_reference:
             sale.payment_reference = f"ORD-{uuid4().hex[:12].upper()}"
 
-        sale.payment_method = payment_method
+        sale.payment_method_preference = payment_method
+        sale.payment_method = None
         if sale.payment_status == "unpaid":
             sale.payment_status = "pending"
-        sale.save(update_fields=["payment_reference", "payment_method", "payment_status", "updated_at"])
+        sale.save(
+            update_fields=[
+                "payment_reference",
+                "payment_method_preference",
+                "payment_method",
+                "payment_status",
+                "updated_at",
+            ]
+        )
 
         AuditLog.objects.create(
             action="store_order_payment_checkout_init",
@@ -806,7 +1105,8 @@ class StoreOrderPaymentView(APIView):
             code="STORE_ORDER_PAYMENT_CHECKOUT_READY",
             payment={
                 "reference": sale.payment_reference,
-                "method": payment_method,
+                "method": sale.payment_method,
+                "preferred_method": payment_method,
                 "status": sale.payment_status,
                 "paid_at": sale.paid_at.strftime("%Y-%m-%d %H:%M:%S") if sale.paid_at else None,
                 "checkout_url": checkout_url,
@@ -834,8 +1134,6 @@ class StoreWompiVerifyPaymentView(APIView):
         sale_qs = Sale.objects.select_for_update().filter(id=sale_id)
         if request.user.is_authenticated:
             sale_qs = sale_qs.filter(Q(created_by="store_api") | Q(created_by=request.user.username))
-        else:
-            sale_qs = sale_qs.filter(created_by="store_api")
         sale = sale_qs.first()
         if not sale:
             return error_response(
@@ -936,6 +1234,139 @@ class StoreWompiWebhookView(APIView):
             order_id=sale.id,
             payment_status=sale.payment_status,
             status=sale.status,
+        )
+
+
+@extend_schema(tags=["Store"])
+class StoreShippingWebhookView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    @transaction.atomic
+    def post(self, request):
+        secret = getattr(settings, "STORE_SHIPPING_WEBHOOK_SECRET", "")
+        if not secret:
+            return error_response(
+                detail="Webhook de transportadora no configurado",
+                code="STORE_SHIPPING_WEBHOOK_NOT_CONFIGURED",
+                http_status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        signature = (request.headers.get("X-Store-Shipping-Signature") or "").strip()
+        payload = request.data if isinstance(request.data, dict) else {}
+        if not is_valid_shipping_webhook_signature(payload, signature, secret):
+            return error_response(
+                detail="Firma de webhook invalida",
+                code="STORE_SHIPPING_WEBHOOK_INVALID_SIGNATURE",
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        event_id = str(payload.get("event_id") or "").strip()
+        event_type = str(payload.get("event_type") or payload.get("status") or "").strip().lower()
+        tracking_number = str(payload.get("tracking_number") or "").strip()
+        provider_reference = str(payload.get("provider_reference") or "").strip()
+
+        if not event_id or not event_type:
+            return error_response(
+                detail="event_id y event_type son requeridos",
+                code="STORE_SHIPPING_WEBHOOK_MISSING_FIELDS",
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        shipment_qs = Shipment.objects.select_for_update()
+        if tracking_number:
+            shipment_qs = shipment_qs.filter(tracking_number=tracking_number)
+        elif provider_reference:
+            shipment_qs = shipment_qs.filter(provider_reference=provider_reference)
+        else:
+            return error_response(
+                detail="tracking_number o provider_reference es requerido",
+                code="STORE_SHIPPING_WEBHOOK_MISSING_REFERENCE",
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        shipment = shipment_qs.select_related("sale").first()
+        if not shipment:
+            return success_response(
+                detail="Webhook sin envio asociado",
+                code="STORE_SHIPPING_WEBHOOK_NOT_MATCHED",
+            )
+
+        event, created = ShipmentEvent.objects.get_or_create(
+            provider_event_id=event_id,
+            defaults={
+                "shipment": shipment,
+                "event_type": event_type,
+                "payload": payload,
+                "occurred_at": timezone.now(),
+            },
+        )
+        if not created:
+            return success_response(
+                detail="Evento duplicado ignorado",
+                code="STORE_SHIPPING_WEBHOOK_DUPLICATE",
+                shipment_id=shipment.id,
+            )
+
+        sale = shipment.sale
+        now = timezone.now()
+        shipment_fields = ["updated_at"]
+        sale_fields = ["updated_at"]
+
+        if event_type in {"in_transit", "picked_up"}:
+            shipment.status = Shipment.ShipmentStatus.IN_TRANSIT
+            shipment_fields.append("status")
+            if sale.status in {"paid", "processing"}:
+                sale.status = "shipped"
+                sale_fields.append("status")
+            if not sale.shipped_at:
+                sale.shipped_at = now
+                sale_fields.append("shipped_at")
+            if not sale.confirmed_at:
+                sale.confirmed_at = now
+                sale_fields.append("confirmed_at")
+        elif event_type == "delivered":
+            shipment.status = Shipment.ShipmentStatus.DELIVERED
+            shipment_fields.append("status")
+            if sale.status in {"paid", "processing", "shipped"}:
+                sale.status = "delivered"
+                sale_fields.append("status")
+            if not sale.shipped_at:
+                sale.shipped_at = now
+                sale_fields.append("shipped_at")
+            if not sale.delivered_at:
+                sale.delivered_at = now
+                sale_fields.append("delivered_at")
+        elif event_type in {"failed", "exception"}:
+            shipment.status = Shipment.ShipmentStatus.FAILED
+            shipment_fields.append("status")
+        elif event_type == "canceled":
+            shipment.status = Shipment.ShipmentStatus.CANCELED
+            shipment_fields.append("status")
+
+        shipment.save(update_fields=list(dict.fromkeys(shipment_fields)))
+        sale.save(update_fields=list(dict.fromkeys(sale_fields)))
+
+        AuditLog.objects.create(
+            action="store_shipping_webhook_sync",
+            entity="shipment",
+            entity_id=shipment.id,
+            performed_by="shipping_webhook",
+            extra_data={
+                "event_id": event_id,
+                "event_type": event_type,
+                "sale_status": sale.status,
+                "shipment_status": shipment.status,
+            },
+        )
+
+        return success_response(
+            detail="Webhook de transportadora procesado correctamente",
+            code="STORE_SHIPPING_WEBHOOK_OK",
+            shipment_id=shipment.id,
+            order_id=sale.id,
+            order_status=sale.status,
+            shipment_status=shipment.status,
+            event_id=event.id,
         )
 
 
@@ -1061,6 +1492,16 @@ class StoreOpsOrderStatusUpdateView(APIView):
             sale.canceled_at = now
             fields_to_update.append("canceled_at")
 
+        if next_status in {"paid", "processing", "shipped", "delivered", "completed"}:
+            try:
+                _ensure_store_order_inventory_discounted(sale, source=request.user.username)
+            except ValidationError as exc:
+                return error_response(
+                    detail=f"No se pudo descontar inventario: {exc}",
+                    code="STORE_OPS_INVENTORY_DISCOUNT_FAILED",
+                    http_status=status.HTTP_409_CONFLICT,
+                )
+
         sale.save(update_fields=list(dict.fromkeys(fields_to_update)))
 
         AuditLog.objects.create(
@@ -1087,6 +1528,12 @@ class StoreOpsSummaryView(APIView):
 
     def get(self, request):
         queryset = Sale.objects.filter(is_order=True)
+        inventory_alert_qs = (
+            queryset.filter(status__in=["paid", "processing", "shipped", "delivered", "completed"])
+            .exclude(inventory_movements__movement_type=MovementInventory.MovementType.SALE_OUT)
+            .distinct()
+            .order_by("-created_at")
+        )
         return success_response(
             detail="Resumen operativo obtenido correctamente",
             code="STORE_OPS_SUMMARY_OK",
@@ -1098,5 +1545,136 @@ class StoreOpsSummaryView(APIView):
                 "shipped": queryset.filter(status="shipped").count(),
                 "delivered": queryset.filter(status="delivered").count(),
                 "canceled": queryset.filter(status="canceled").count(),
+                "inventory_alerts": {
+                    "orders_without_stock_discount": inventory_alert_qs.count(),
+                    "affected_order_ids": list(inventory_alert_qs.values_list("id", flat=True)[:25]),
+                },
             },
+        )
+
+
+@extend_schema(tags=["StoreOps"])
+class StoreOpsManualShipmentView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, sale_id: int):
+        if not request.user.has_perm("inventory.change_sale"):
+            return error_response(
+                detail="No tienes permisos para registrar guias manuales",
+                code="PERMISSION_DENIED",
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = StoreOpsManualShipmentSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                detail="No se pudo registrar la guia manual",
+                code="STORE_OPS_MANUAL_SHIPMENT_INVALID",
+                http_status=status.HTTP_400_BAD_REQUEST,
+                errors=[str(serializer.errors)],
+            )
+
+        sale = Sale.objects.select_for_update().filter(id=sale_id, is_order=True).first()
+        if not sale:
+            return error_response(
+                detail="Orden no encontrada",
+                code="STORE_OPS_ORDER_NOT_FOUND",
+                http_status=status.HTTP_404_NOT_FOUND,
+            )
+
+        data = serializer.validated_data
+        tracking_number = data["tracking_number"]
+
+        duplicate_tracking = Shipment.objects.filter(tracking_number=tracking_number).exclude(sale_id=sale.id).exists()
+        if duplicate_tracking:
+            return error_response(
+                detail="tracking_number ya esta asociado a otra orden",
+                code="STORE_OPS_MANUAL_SHIPMENT_DUPLICATE_TRACKING",
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
+        shipment = Shipment.objects.filter(sale_id=sale.id, tracking_number=tracking_number).first()
+        shipment_fields = [
+            "carrier",
+            "service",
+            "provider_reference",
+            "label_url",
+            "shipping_cost",
+            "currency",
+            "status",
+            "updated_at",
+        ]
+
+        if shipment:
+            shipment.carrier = data["carrier"]
+            shipment.service = (data.get("service") or "manual").strip() or "manual"
+            shipment.provider_reference = (data.get("provider_reference") or "").strip() or None
+            shipment.label_url = (data.get("label_url") or "").strip() or None
+            shipment.shipping_cost = data["shipping_cost"]
+            shipment.currency = (data.get("currency") or "COP").strip().upper() or "COP"
+            shipment.status = data["status"]
+            shipment.metadata = {"source": "ops_manual"}
+            shipment_fields.append("metadata")
+            shipment.save(update_fields=list(dict.fromkeys(shipment_fields)))
+        else:
+            shipment = Shipment.objects.create(
+                sale=sale,
+                carrier=data["carrier"],
+                service=(data.get("service") or "manual").strip() or "manual",
+                tracking_number=tracking_number,
+                provider_reference=(data.get("provider_reference") or "").strip() or None,
+                label_url=(data.get("label_url") or "").strip() or None,
+                shipping_cost=data["shipping_cost"],
+                currency=(data.get("currency") or "COP").strip().upper() or "COP",
+                status=data["status"],
+                metadata={"source": "ops_manual"},
+                created_by=request.user.username,
+            )
+
+        now = timezone.now()
+        sale_fields = ["updated_at"]
+        if shipment.status in {Shipment.ShipmentStatus.CREATED, Shipment.ShipmentStatus.IN_TRANSIT}:
+            if sale.status in {"paid", "processing"}:
+                sale.status = "shipped"
+                sale_fields.append("status")
+            if not sale.confirmed_at:
+                sale.confirmed_at = now
+                sale_fields.append("confirmed_at")
+            if not sale.shipped_at:
+                sale.shipped_at = now
+                sale_fields.append("shipped_at")
+        if shipment.status == Shipment.ShipmentStatus.DELIVERED:
+            if sale.status in {"paid", "processing", "shipped"}:
+                sale.status = "delivered"
+                sale_fields.append("status")
+            if not sale.confirmed_at:
+                sale.confirmed_at = now
+                sale_fields.append("confirmed_at")
+            if not sale.shipped_at:
+                sale.shipped_at = now
+                sale_fields.append("shipped_at")
+            if not sale.delivered_at:
+                sale.delivered_at = now
+                sale_fields.append("delivered_at")
+        sale.save(update_fields=list(dict.fromkeys(sale_fields)))
+
+        AuditLog.objects.create(
+            action="store_ops_manual_shipment_saved",
+            entity="shipment",
+            entity_id=shipment.id,
+            performed_by=request.user.username,
+            extra_data={
+                "sale_id": sale.id,
+                "tracking_number": shipment.tracking_number,
+                "shipment_status": shipment.status,
+                "order_status": sale.status,
+            },
+        )
+
+        return success_response(
+            detail="Guia manual registrada correctamente",
+            code="STORE_OPS_MANUAL_SHIPMENT_SAVED",
+            shipment=_serialize_latest_shipment(sale),
+            order=_serialize_store_order(sale),
         )

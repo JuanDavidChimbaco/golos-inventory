@@ -269,6 +269,7 @@ class Sale(models.Model):
         default="unpaid",
     )
     payment_method = models.CharField(max_length=30, blank=True, null=True)
+    payment_method_preference = models.CharField(max_length=30, blank=True, null=True)
     payment_reference = models.CharField(max_length=80, blank=True, null=True)
     paid_at = models.DateTimeField(blank=True, null=True)
     confirmed_at = models.DateTimeField(blank=True, null=True)
@@ -276,6 +277,7 @@ class Sale(models.Model):
     delivered_at = models.DateTimeField(blank=True, null=True)
     canceled_at = models.DateTimeField(blank=True, null=True)
     status_notes = models.TextField(blank=True, null=True)
+    shipping_address = models.JSONField(blank=True, null=True)
     is_order = models.BooleanField(default=False)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     active = models.BooleanField(default=True)
@@ -289,6 +291,58 @@ class Sale(models.Model):
 
     def __str__(self):
         return f"Sale to {self.customer} - {self.status}"
+
+
+class Shipment(models.Model):
+    """Guia de envio asociada a una orden."""
+
+    class ShipmentStatus(models.TextChoices):
+        CREATED = "created", "Created"
+        IN_TRANSIT = "in_transit", "In transit"
+        DELIVERED = "delivered", "Delivered"
+        FAILED = "failed", "Failed"
+        CANCELED = "canceled", "Canceled"
+
+    sale = models.ForeignKey(Sale, on_delete=models.PROTECT, related_name="shipments")
+    carrier = models.CharField(max_length=60)
+    service = models.CharField(max_length=60)
+    tracking_number = models.CharField(max_length=80, unique=True)
+    provider_reference = models.CharField(max_length=120, blank=True, null=True)
+    label_url = models.URLField(blank=True, null=True)
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    currency = models.CharField(max_length=10, default="COP")
+    status = models.CharField(
+        max_length=20,
+        choices=ShipmentStatus.choices,
+        default=ShipmentStatus.CREATED,
+    )
+    metadata = models.JSONField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.CharField(max_length=50, default="store_api")
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.carrier} {self.tracking_number} - sale {self.sale_id}"
+
+
+class ShipmentEvent(models.Model):
+    """Evento de la transportadora para idempotencia y auditoria."""
+
+    shipment = models.ForeignKey(Shipment, on_delete=models.PROTECT, related_name="events")
+    provider_event_id = models.CharField(max_length=120, unique=True)
+    event_type = models.CharField(max_length=60)
+    payload = models.JSONField(blank=True, null=True)
+    occurred_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.provider_event_id} - {self.event_type}"
 
 
 class SaleDetail(models.Model):

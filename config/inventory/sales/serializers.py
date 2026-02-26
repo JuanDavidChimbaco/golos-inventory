@@ -3,6 +3,7 @@ Serializers para gestión de ventas
 """
 from rest_framework import serializers
 from django.db import models
+from django.utils import timezone
 from ..models import Sale, SaleDetail, MovementInventory, ProductVariant
 
 
@@ -59,15 +60,28 @@ class SaleDetailCreateSerializer(serializers.ModelSerializer):
 
 class SaleCreateSerializer(serializers.ModelSerializer):
     """Serializer para crear ventas"""
+    payment_method = serializers.ChoiceField(
+        choices=["CASH", "NEQUI", "DAVIPLATA", "CARD", "TRANSFER", "PSE", "OTHER"],
+        required=True,
+    )
+    payment_reference = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=80)
+
     class Meta:
         model = Sale
-        fields = ["customer", "is_order"]
+        fields = ["customer", "is_order", "payment_method", "payment_reference"]
+
+    def validate_payment_method(self, value: str) -> str:
+        return value.strip().upper()
 
     def create(self, validated_data):
         # Asignar automáticamente el usuario actual como created_by
         request = self.context.get('request')
         if request and request.user:
             validated_data['created_by'] = request.user.username
+        validated_data["payment_status"] = "paid"
+        validated_data["paid_at"] = timezone.now()
+        validated_data["payment_method"] = validated_data["payment_method"].strip().upper()
+        validated_data["payment_reference"] = (validated_data.get("payment_reference") or "").strip() or None
         return super().create(validated_data)
 
 

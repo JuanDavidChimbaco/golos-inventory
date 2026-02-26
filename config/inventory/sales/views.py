@@ -49,7 +49,7 @@ class SaleViewSet(viewsets.ModelViewSet):
     ordering = ["-created_at"]
 
     def get_serializer_class(self):
-        if self.action in ["list", "retrieve", "create"]:
+        if self.action in ["list", "retrieve"]:
             return SaleReadSerializer
         return SaleCreateSerializer
 

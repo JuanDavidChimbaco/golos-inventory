@@ -10,7 +10,7 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 
-from ..models import ProductImage, ProductVariant, StoreBranding
+from ..models import ProductImage, ProductVariant, Shipment, StoreBranding
 
 
 class StoreVariantSerializer(serializers.ModelSerializer):
@@ -18,7 +18,7 @@ class StoreVariantSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductVariant
-        fields = ["id", "gender", "color", "size", "price", "stock"]
+        fields = ["id", "gender", "color", "size", "price", "stock", "stock_minimum"]
 
 
 class StoreProductSerializer(serializers.Serializer):
@@ -161,6 +161,12 @@ class StoreCartItemSerializer(serializers.Serializer):
 
 class StoreCartValidateSerializer(serializers.Serializer):
     items = serializers.ListField(child=StoreCartItemSerializer(), min_length=1)
+    shipping_zone = serializers.ChoiceField(
+        choices=["local", "regional", "national"],
+        required=False,
+        default="regional",
+    )
+    estimated_weight_grams = serializers.IntegerField(required=False, min_value=1)
 
     def validate_items(self, items: list[dict]) -> list[dict]:
         validator = StoreItemsValidationSerializer(data={"items": items})
@@ -173,6 +179,28 @@ class StoreCheckoutSerializer(serializers.Serializer):
     customer_contact = serializers.CharField(max_length=100, required=False, allow_blank=True)
     items = serializers.ListField(child=StoreCartItemSerializer(), min_length=1)
     is_order = serializers.BooleanField(required=False, default=True)
+    shipping_zone = serializers.ChoiceField(
+        choices=["local", "regional", "national"],
+        required=False,
+        default="regional",
+    )
+    estimated_weight_grams = serializers.IntegerField(required=False, min_value=1)
+    shipping_address = serializers.DictField(required=True)
+
+    def validate_shipping_address(self, value: dict) -> dict:
+        required_keys = ["department", "city", "address_line1", "recipient_name", "recipient_phone"]
+        cleaned: dict[str, str] = {}
+        for key in required_keys:
+            field_value = str(value.get(key, "")).strip()
+            if not field_value:
+                raise serializers.ValidationError(f"{key} es requerido.")
+            cleaned[key] = field_value
+
+        optional_keys = ["address_line2", "reference", "postal_code"]
+        for key in optional_keys:
+            cleaned[key] = str(value.get(key, "")).strip()
+
+        return cleaned
 
     def validate_items(self, items: list[dict]) -> list[dict]:
         validator = StoreItemsValidationSerializer(data={"items": items})
@@ -237,3 +265,30 @@ class StoreCustomerLoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("La cuenta esta inactiva.")
         attrs["user"] = user
         return attrs
+
+
+class StoreOpsManualShipmentSerializer(serializers.Serializer):
+    carrier = serializers.CharField(max_length=60)
+    tracking_number = serializers.CharField(max_length=80)
+    shipping_cost = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0"))
+    service = serializers.CharField(max_length=60, required=False, allow_blank=True, default="manual")
+    provider_reference = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    label_url = serializers.URLField(required=False, allow_blank=True)
+    currency = serializers.CharField(max_length=10, required=False, allow_blank=True, default="COP")
+    status = serializers.ChoiceField(
+        choices=Shipment.ShipmentStatus.choices,
+        required=False,
+        default=Shipment.ShipmentStatus.IN_TRANSIT,
+    )
+
+    def validate_tracking_number(self, value: str) -> str:
+        normalized = value.strip().upper()
+        if not normalized:
+            raise serializers.ValidationError("tracking_number es requerido.")
+        return normalized
+
+    def validate_carrier(self, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise serializers.ValidationError("carrier es requerido.")
+        return normalized

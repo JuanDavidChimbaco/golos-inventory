@@ -14,11 +14,11 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env.local file
-load_dotenv('.env.local')
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from config/.env.local regardless of current working directory
+load_dotenv(BASE_DIR / '.env.local')
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-key-change-this')
@@ -123,6 +123,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:8080",
     "http://127.0.0.1:8080",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True
@@ -323,5 +325,35 @@ STORE_AUTO_TO_PROCESSING_MINUTES = int(os.getenv('STORE_AUTO_TO_PROCESSING_MINUT
 STORE_AUTO_TO_SHIPPED_MINUTES = int(os.getenv('STORE_AUTO_TO_SHIPPED_MINUTES', '120'))
 STORE_AUTO_TO_DELIVERED_MINUTES = int(os.getenv('STORE_AUTO_TO_DELIVERED_MINUTES', '1440'))
 STORE_AUTO_TO_COMPLETED_MINUTES = int(os.getenv('STORE_AUTO_TO_COMPLETED_MINUTES', '2880'))
+
+# Shipping integration
+STORE_SHIPPING_ENABLED = os.getenv('STORE_SHIPPING_ENABLED', 'True').lower() == 'true'
+STORE_SHIPPING_AUTO_CREATE = os.getenv('STORE_SHIPPING_AUTO_CREATE', 'True').lower() == 'true'
+STORE_SHIPPING_PROVIDER = os.getenv('STORE_SHIPPING_PROVIDER', 'mock')
+STORE_SHIPPING_CARRIER_NAME = os.getenv('STORE_SHIPPING_CARRIER_NAME', 'LocalCarrier')
+STORE_SHIPPING_MAX_DELIVERY_HOURS = int(os.getenv('STORE_SHIPPING_MAX_DELIVERY_HOURS', '72'))
+STORE_SHIPPING_SERVICES = os.getenv('STORE_SHIPPING_SERVICES', 'eco:12000:72,standard:18000:48,express:25000:24')
+STORE_SHIPPING_WEBHOOK_SECRET = os.getenv('STORE_SHIPPING_WEBHOOK_SECRET', '')
+STORE_SHIPPING_API_BASE_URL = os.getenv('STORE_SHIPPING_API_BASE_URL', '')
+STORE_SHIPPING_CREATE_PATH = os.getenv('STORE_SHIPPING_CREATE_PATH', '/shipments')
+STORE_SHIPPING_API_KEY = os.getenv('STORE_SHIPPING_API_KEY', '')
+STORE_SHIPPING_AUTH_HEADER = os.getenv('STORE_SHIPPING_AUTH_HEADER', 'Authorization')
+STORE_SHIPPING_AUTH_PREFIX = os.getenv('STORE_SHIPPING_AUTH_PREFIX', 'Bearer ')
+STORE_SHIPPING_API_TIMEOUT_SECONDS = int(os.getenv('STORE_SHIPPING_API_TIMEOUT_SECONDS', '15'))
+
+# Store profitability guard (online margin control)
+STORE_MARGIN_GUARD_ENABLED = os.getenv('STORE_MARGIN_GUARD_ENABLED', 'False').lower() == 'true'
+STORE_MARGIN_MIN_PERCENT = os.getenv('STORE_MARGIN_MIN_PERCENT', '0')
+STORE_MARGIN_WOMPI_PERCENT = os.getenv('STORE_MARGIN_WOMPI_PERCENT', '2.65')
+STORE_MARGIN_WOMPI_FIXED_FEE = os.getenv('STORE_MARGIN_WOMPI_FIXED_FEE', '0')
+STORE_MARGIN_WOMPI_VAT_PERCENT = os.getenv('STORE_MARGIN_WOMPI_VAT_PERCENT', '19')
+STORE_MARGIN_PACKAGING_COST = os.getenv('STORE_MARGIN_PACKAGING_COST', '0')
+STORE_MARGIN_RISK_PERCENT = os.getenv('STORE_MARGIN_RISK_PERCENT', '0')
+STORE_MARGIN_DEFAULT_WEIGHT_PER_ITEM_GRAMS = int(os.getenv('STORE_MARGIN_DEFAULT_WEIGHT_PER_ITEM_GRAMS', '900'))
+STORE_MARGIN_DEFAULT_SHIPPING_COST = os.getenv('STORE_MARGIN_DEFAULT_SHIPPING_COST', '0')
+STORE_MARGIN_SHIPPING_COST_MATRIX = os.getenv(
+    'STORE_MARGIN_SHIPPING_COST_MATRIX',
+    'local:2000:0,regional:2000:0,national:2000:0',
+)
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

@@ -9,11 +9,13 @@ from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
 from decimal import Decimal
+import json
 from PIL import Image
 from io import BytesIO
 from unittest.mock import patch
-from .models import Product, ProductVariant, MovementInventory, Sale, SaleDetail, ProductImage, Supplier
+from .models import Product, ProductVariant, MovementInventory, Sale, SaleDetail, ProductImage, Shipment, ShipmentEvent, Supplier
 from .core.services import confirm_sale, ImageService
+from .store.shipping import shipping_webhook_signature
 
 
 class ConfirmSaleServiceTest(TestCase):
@@ -757,6 +759,7 @@ class ApiErrorContractTest(APITestCase):
         self.assertIsNotNone(response.data["images"][0]["url"])
 
 
+@override_settings(STORE_MARGIN_GUARD_ENABLED=False)
 class StorePublicApiTest(APITestCase):
     def setUp(self):
         self.ops_user = User.objects.create_superuser(
@@ -862,6 +865,20 @@ class StorePublicApiTest(APITestCase):
         )
 
     def _checkout_as_customer(self, payload: dict):
+        if "shipping_address" not in payload:
+            payload = {
+                **payload,
+                "shipping_address": {
+                    "department": "Cundinamarca",
+                    "city": "Bogota",
+                    "address_line1": "Calle 100 # 10-20",
+                    "address_line2": "",
+                    "reference": "Casa",
+                    "postal_code": "110111",
+                    "recipient_name": payload.get("customer_name") or "Cliente Test",
+                    "recipient_phone": payload.get("customer_contact") or "3000000000",
+                },
+            }
         self.client.force_authenticate(user=self.customer_user)
         response = self.client.post(reverse("store-checkout"), payload, format="json")
         self.client.force_authenticate(user=None)
@@ -891,6 +908,8 @@ class StorePublicApiTest(APITestCase):
         self.assertEqual(response.data["code"], "STORE_CART_VALID")
         self.assertEqual(len(response.data["items"]), 1)
         self.assertEqual(response.data["total"], "399.80")
+        self.assertIn("commercial", response.data)
+        self.assertIn("is_viable_online", response.data["commercial"])
 
     def test_store_checkout_creates_pending_sale(self):
         payload = {
@@ -911,6 +930,34 @@ class StorePublicApiTest(APITestCase):
         self.assertEqual(sale.created_by, self.customer_user.username)
         self.assertEqual(sale.total, Decimal("599.70"))
         self.assertEqual(sale.details.count(), 1)
+        self.assertEqual(sale.shipping_address.get("city"), "Bogota")
+        self.assertIn("commercial", response.data)
+
+    @override_settings(
+        STORE_MARGIN_GUARD_ENABLED=True,
+        STORE_MARGIN_MIN_PERCENT=Decimal("80"),
+        STORE_MARGIN_WOMPI_PERCENT=Decimal("2.65"),
+        STORE_MARGIN_WOMPI_FIXED_FEE=Decimal("700"),
+        STORE_MARGIN_WOMPI_VAT_PERCENT=Decimal("19"),
+        STORE_MARGIN_PACKAGING_COST=Decimal("1500"),
+        STORE_MARGIN_RISK_PERCENT=Decimal("2"),
+        STORE_MARGIN_DEFAULT_SHIPPING_COST=Decimal("12000"),
+    )
+    def test_store_checkout_blocks_when_margin_guard_fails(self):
+        payload = {
+            "customer_name": "Cliente Margen",
+            "customer_contact": "3001231234",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+            "shipping_zone": "national",
+            "estimated_weight_grams": 2000,
+        }
+
+        response = self._checkout_as_customer(payload)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["code"], "STORE_MARGIN_GUARD_BLOCKED")
+        self.assertIn("commercial", response.data)
 
     def test_store_checkout_requires_authentication(self):
         payload = {
@@ -1085,12 +1132,185 @@ class StorePublicApiTest(APITestCase):
             "customer_contact": "3001112222",
             "transaction_id": "tx_test_123",
         }
+        self.client.force_authenticate(user=self.customer_user)
         response = self.client.post(reverse("store-order-wompi-verify", args=[sale_id]), verify_payload, format="json")
+        self.client.force_authenticate(user=None)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["code"], "STORE_WOMPI_PAYMENT_SYNCED")
         self.assertEqual(response.data["order"]["status"], "paid")
         self.assertEqual(response.data["order"]["payment_status"], "paid")
+        movement = MovementInventory.objects.filter(
+            sale_id=sale_id,
+            movement_type=MovementInventory.MovementType.SALE_OUT,
+            variant_id=self.variant.id,
+        ).first()
+        self.assertIsNotNone(movement)
+        self.assertEqual(movement.quantity, -1)
+
+    @override_settings(
+        STORE_SHIPPING_ENABLED=True,
+        STORE_SHIPPING_AUTO_CREATE=True,
+        STORE_SHIPPING_PROVIDER="mock",
+        STORE_SHIPPING_CARRIER_NAME="TestCarrier",
+        STORE_SHIPPING_SERVICES="eco:9000:72,express:15000:24",
+    )
+    @patch("inventory.store.views.get_transaction")
+    def test_store_wompi_verify_creates_shipment_for_paid_order(self, mock_get_transaction):
+        checkout_payload = {
+            "customer_name": "Cliente Shipment",
+            "customer_contact": "3002223333",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        checkout_response = self._checkout_as_customer(checkout_payload)
+        sale_id = checkout_response.data["order"]["sale_id"]
+        sale = Sale.objects.get(id=sale_id)
+        sale.payment_reference = "ORD-SHIP-123"
+        sale.save(update_fields=["payment_reference"])
+
+        mock_get_transaction.return_value = {
+            "data": {
+                "id": "tx_ship_123",
+                "status": "APPROVED",
+                "reference": "ORD-SHIP-123",
+                "payment_method_type": "CARD",
+            }
+        }
+
+        verify_payload = {
+            "customer_contact": "3002223333",
+            "transaction_id": "tx_ship_123",
+        }
+        self.client.force_authenticate(user=self.customer_user)
+        response = self.client.post(reverse("store-order-wompi-verify", args=[sale_id]), verify_payload, format="json")
+        self.client.force_authenticate(user=None)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["order"]["status"], "paid")
+        shipment = Shipment.objects.filter(sale_id=sale_id).first()
+        self.assertIsNotNone(shipment)
+        self.assertEqual(shipment.carrier, "TestCarrier")
+        self.assertEqual(shipment.service, "eco")
+
+    @override_settings(
+        STORE_SHIPPING_ENABLED=True,
+        STORE_SHIPPING_AUTO_CREATE=True,
+        STORE_SHIPPING_PROVIDER="http",
+        STORE_SHIPPING_API_BASE_URL="https://shipping.example.com",
+        STORE_SHIPPING_CREATE_PATH="/v1/shipments",
+        STORE_SHIPPING_API_KEY="ship_key_123",
+        STORE_SHIPPING_AUTH_HEADER="Authorization",
+        STORE_SHIPPING_AUTH_PREFIX="Bearer ",
+        STORE_SHIPPING_SERVICES="eco:9000:72,express:15000:24",
+    )
+    @patch("inventory.store.shipping._http_json")
+    @patch("inventory.store.views.get_transaction")
+    def test_store_wompi_verify_creates_http_provider_shipment(self, mock_get_transaction, mock_http_json):
+        checkout_payload = {
+            "customer_name": "Cliente Provider HTTP",
+            "customer_contact": "3005550000",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        checkout_response = self._checkout_as_customer(checkout_payload)
+        sale_id = checkout_response.data["order"]["sale_id"]
+        sale = Sale.objects.get(id=sale_id)
+        sale.payment_reference = "ORD-SHIP-HTTP-1"
+        sale.save(update_fields=["payment_reference"])
+
+        mock_get_transaction.return_value = {
+            "data": {
+                "id": "tx_ship_http_1",
+                "status": "APPROVED",
+                "reference": "ORD-SHIP-HTTP-1",
+                "payment_method_type": "CARD",
+            }
+        }
+        mock_http_json.return_value = {
+            "data": {
+                "id": "shp_123",
+                "tracking_number": "TRK-HTTP-001",
+                "label_url": "https://shipping.example.com/labels/TRK-HTTP-001.pdf",
+                "carrier": "CarrierHTTP",
+                "service": "eco",
+                "shipping_cost": "8900",
+                "currency": "COP",
+                "status": "created",
+            }
+        }
+
+        verify_payload = {
+            "customer_contact": "3005550000",
+            "transaction_id": "tx_ship_http_1",
+        }
+        self.client.force_authenticate(user=self.customer_user)
+        response = self.client.post(reverse("store-order-wompi-verify", args=[sale_id]), verify_payload, format="json")
+        self.client.force_authenticate(user=None)
+
+        self.assertEqual(response.status_code, 200)
+        shipment = Shipment.objects.filter(sale_id=sale_id).first()
+        self.assertIsNotNone(shipment)
+        self.assertEqual(shipment.tracking_number, "TRK-HTTP-001")
+        self.assertEqual(shipment.carrier, "CarrierHTTP")
+        self.assertEqual(str(shipment.shipping_cost), "8900.00")
+
+    @override_settings(STORE_SHIPPING_WEBHOOK_SECRET="ship_secret")
+    def test_store_shipping_webhook_updates_status_and_is_idempotent(self):
+        sale = Sale.objects.create(
+            customer="Cliente Webhook",
+            created_by="store_api",
+            is_order=True,
+            status="processing",
+            payment_status="paid",
+            total=Decimal("120.00"),
+            confirmed_at=timezone.now() - timedelta(hours=3),
+        )
+        shipment = Shipment.objects.create(
+            sale=sale,
+            carrier="CarrierX",
+            service="standard",
+            tracking_number="TRK-ABC-123",
+            provider_reference="PRV-123",
+            shipping_cost=Decimal("10000"),
+            currency="COP",
+            status=Shipment.ShipmentStatus.IN_TRANSIT,
+            created_by="test",
+        )
+
+        payload = {
+            "event_id": "evt_ship_1",
+            "event_type": "delivered",
+            "tracking_number": shipment.tracking_number,
+        }
+        signature = shipping_webhook_signature(
+            json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
+            "ship_secret",
+        )
+
+        response = self.client.post(
+            reverse("store-shipping-webhook"),
+            payload,
+            format="json",
+            HTTP_X_STORE_SHIPPING_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_SHIPPING_WEBHOOK_OK")
+        sale.refresh_from_db()
+        shipment.refresh_from_db()
+        self.assertEqual(sale.status, "delivered")
+        self.assertEqual(shipment.status, Shipment.ShipmentStatus.DELIVERED)
+        self.assertEqual(ShipmentEvent.objects.filter(provider_event_id="evt_ship_1").count(), 1)
+
+        duplicate_response = self.client.post(
+            reverse("store-shipping-webhook"),
+            payload,
+            format="json",
+            HTTP_X_STORE_SHIPPING_SIGNATURE=signature,
+        )
+        self.assertEqual(duplicate_response.status_code, 200)
+        self.assertEqual(duplicate_response.data["code"], "STORE_SHIPPING_WEBHOOK_DUPLICATE")
+        self.assertEqual(ShipmentEvent.objects.filter(provider_event_id="evt_ship_1").count(), 1)
 
     @override_settings(
         STORE_AUTO_ADVANCE_ENABLED=True,
@@ -1163,6 +1383,34 @@ class StorePublicApiTest(APITestCase):
         self.assertEqual(auth_response.data["code"], "STORE_OPS_ORDERS_OK")
         self.assertIn("orders", auth_response.data)
 
+    def test_store_ops_summary_reports_orders_missing_inventory_discount(self):
+        sale = Sale.objects.create(
+            customer="Cliente Riesgo Inventario",
+            created_by="store_api",
+            is_order=True,
+            status="processing",
+            payment_status="paid",
+            total=Decimal("199.90"),
+            paid_at=timezone.now() - timedelta(minutes=20),
+            confirmed_at=timezone.now() - timedelta(minutes=10),
+        )
+        SaleDetail.objects.create(
+            sale=sale,
+            variant=self.variant,
+            quantity=1,
+            price=self.variant.price,
+            subtotal=self.variant.price,
+        )
+
+        self.client.force_authenticate(user=self.ops_user)
+        response = self.client.get(reverse("store-ops-summary"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_OPS_SUMMARY_OK")
+        alerts = response.data["summary"]["inventory_alerts"]
+        self.assertGreaterEqual(alerts["orders_without_stock_discount"], 1)
+        self.assertIn(sale.id, alerts["affected_order_ids"])
+
     def test_store_ops_can_update_order_status(self):
         checkout_payload = {
             "customer_name": "Cliente Ops",
@@ -1183,6 +1431,92 @@ class StorePublicApiTest(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["code"], "STORE_OPS_ORDER_STATUS_UPDATED")
         self.assertEqual(response.data["order"]["status"], "paid")
+        movement = MovementInventory.objects.filter(
+            sale_id=sale_id,
+            movement_type=MovementInventory.MovementType.SALE_OUT,
+            variant_id=self.variant.id,
+        ).first()
+        self.assertIsNotNone(movement)
+        self.assertEqual(movement.quantity, -1)
+
+    def test_store_ops_can_register_manual_shipment(self):
+        sale = Sale.objects.create(
+            customer="Cliente Manual",
+            created_by="store_api",
+            is_order=True,
+            status="paid",
+            payment_status="paid",
+            total=Decimal("150.00"),
+            paid_at=timezone.now() - timedelta(minutes=10),
+        )
+
+        self.client.force_authenticate(user=self.ops_user)
+        payload = {
+            "carrier": "Servientrega",
+            "tracking_number": "GUIA-001-ABC",
+            "shipping_cost": "12000.00",
+            "service": "mostrador",
+            "status": "in_transit",
+        }
+        response = self.client.post(
+            reverse("store-ops-order-shipment-manual", args=[sale.id]),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_OPS_MANUAL_SHIPMENT_SAVED")
+        sale.refresh_from_db()
+        self.assertEqual(sale.status, "shipped")
+        shipment = Shipment.objects.filter(sale_id=sale.id, tracking_number="GUIA-001-ABC").first()
+        self.assertIsNotNone(shipment)
+        self.assertEqual(shipment.carrier, "Servientrega")
+
+    def test_store_ops_manual_shipment_rejects_duplicate_tracking(self):
+        sale_a = Sale.objects.create(
+            customer="Cliente A",
+            created_by="store_api",
+            is_order=True,
+            status="paid",
+            payment_status="paid",
+            total=Decimal("80.00"),
+            paid_at=timezone.now() - timedelta(minutes=5),
+        )
+        sale_b = Sale.objects.create(
+            customer="Cliente B",
+            created_by="store_api",
+            is_order=True,
+            status="paid",
+            payment_status="paid",
+            total=Decimal("90.00"),
+            paid_at=timezone.now() - timedelta(minutes=5),
+        )
+        Shipment.objects.create(
+            sale=sale_a,
+            carrier="Interrapidisimo",
+            service="mostrador",
+            tracking_number="GUIA-DUP-123",
+            shipping_cost=Decimal("10000"),
+            currency="COP",
+            status=Shipment.ShipmentStatus.IN_TRANSIT,
+            created_by="storeops",
+        )
+
+        self.client.force_authenticate(user=self.ops_user)
+        payload = {
+            "carrier": "Servientrega",
+            "tracking_number": "GUIA-DUP-123",
+            "shipping_cost": "9500.00",
+            "status": "in_transit",
+        }
+        response = self.client.post(
+            reverse("store-ops-order-shipment-manual", args=[sale_b.id]),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["code"], "STORE_OPS_MANUAL_SHIPMENT_DUPLICATE_TRACKING")
 
     def test_store_customer_register_and_login_endpoints(self):
         register_payload = {
@@ -1227,6 +1561,13 @@ class StorePublicApiTest(APITestCase):
             "customer_contact": "3007770000",
             "items": [{"variant_id": self.variant.id, "quantity": 1}],
             "is_order": True,
+            "shipping_address": {
+                "department": "Antioquia",
+                "city": "Medellin",
+                "address_line1": "Carrera 50 # 10-30",
+                "recipient_name": "Cliente Auth",
+                "recipient_phone": "3007770000",
+            },
         }
         response = self.client.post(reverse("store-checkout"), payload, format="json")
 

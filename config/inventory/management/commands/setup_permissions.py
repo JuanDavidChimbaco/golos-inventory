@@ -53,6 +53,15 @@ class Command(BaseCommand):
                     # No pueden modificar ni confirmar ventas
                 ]
             },
+            'StoreOps': {
+                'description': 'Operacion de pedidos tienda online',
+                'permissions': [
+                    # Permisos minimos para operar Store Ops
+                    'inventory.view_sale',
+                    'inventory.change_sale',
+                    'inventory.view_product',
+                ]
+            },
             'Managers': {
                 'description': 'Administradores del sistema',
                 'permissions': [
