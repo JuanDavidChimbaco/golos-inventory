@@ -308,4 +308,20 @@ AWS_S3_OBJECT_PARAMETERS = {
 # Usar Backblaze para archivos de media (imágenes)
 DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
+# Wompi configuration
+WOMPI_API_BASE_URL = os.getenv('WOMPI_API_BASE_URL', 'https://production.wompi.co/v1')
+WOMPI_CHECKOUT_BASE_URL = os.getenv('WOMPI_CHECKOUT_BASE_URL', 'https://checkout.wompi.co/p/')
+WOMPI_PUBLIC_KEY = os.getenv('WOMPI_PUBLIC_KEY', '')
+WOMPI_PRIVATE_KEY = os.getenv('WOMPI_PRIVATE_KEY', '')
+WOMPI_INTEGRITY_SECRET = os.getenv('WOMPI_INTEGRITY_SECRET', '')
+WOMPI_EVENTS_SECRET = os.getenv('WOMPI_EVENTS_SECRET', '')
+WOMPI_REDIRECT_URL = os.getenv('WOMPI_REDIRECT_URL', 'http://localhost:8080/store/order-status')
+
+# Store order automation
+STORE_AUTO_ADVANCE_ENABLED = os.getenv('STORE_AUTO_ADVANCE_ENABLED', 'True').lower() == 'true'
+STORE_AUTO_TO_PROCESSING_MINUTES = int(os.getenv('STORE_AUTO_TO_PROCESSING_MINUTES', '5'))
+STORE_AUTO_TO_SHIPPED_MINUTES = int(os.getenv('STORE_AUTO_TO_SHIPPED_MINUTES', '120'))
+STORE_AUTO_TO_DELIVERED_MINUTES = int(os.getenv('STORE_AUTO_TO_DELIVERED_MINUTES', '1440'))
+STORE_AUTO_TO_COMPLETED_MINUTES = int(os.getenv('STORE_AUTO_TO_COMPLETED_MINUTES', '2880'))
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

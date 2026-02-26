@@ -1,6 +1,7 @@
-from django.test import TestCase
-from django.contrib.auth.models import User
+from django.test import TestCase, override_settings
+from django.contrib.auth.models import Group, User
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.db import transaction
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APITestCase
@@ -10,6 +11,7 @@ from datetime import timedelta
 from decimal import Decimal
 from PIL import Image
 from io import BytesIO
+from unittest.mock import patch
 from .models import Product, ProductVariant, MovementInventory, Sale, SaleDetail, ProductImage, Supplier
 from .core.services import confirm_sale, ImageService
 
@@ -731,3 +733,590 @@ class ApiErrorContractTest(APITestCase):
         self.assertIn("code", response.data)
         self.assertEqual(response.data["code"], "NOTIFICATIONS_SUPPLIER_RECOMMENDATIONS_OK")
         self.assertIn("recommendations", response.data)
+
+    def test_products_detail_includes_image_url_and_images_url(self):
+        ProductImage.objects.create(
+            product=self.product,
+            variant=self.variant,
+            image="products/contract-test.jpg",
+            is_primary=True,
+            alt_text="Imagen contrato",
+            created_by=self.user.username,
+            updated_by=self.user.username,
+        )
+
+        url = reverse("products-detail", args=[self.product.id])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("image_url", response.data)
+        self.assertIsNotNone(response.data["image_url"])
+        self.assertIn("images", response.data)
+        self.assertGreaterEqual(len(response.data["images"]), 1)
+        self.assertIn("url", response.data["images"][0])
+        self.assertIsNotNone(response.data["images"][0]["url"])
+
+
+class StorePublicApiTest(APITestCase):
+    def setUp(self):
+        self.ops_user = User.objects.create_superuser(
+            username="storeops",
+            email="storeops@example.com",
+            password="storeops123",
+        )
+        customers_group, _ = Group.objects.get_or_create(name="Customers")
+        self.customer_user = User.objects.create_user(
+            username="cliente_store_tests",
+            email="cliente_store_tests@example.com",
+            password="secret1234",
+            first_name="Cliente",
+            last_name="Tests",
+            is_staff=False,
+        )
+        self.customer_user.groups.add(customers_group)
+        self.product = Product.objects.create(
+            name="Tenis Publicos",
+            brand="Golos",
+            description="Modelo para tienda online",
+            created_by="system",
+            updated_by="system",
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            gender="unisex",
+            color="Negro",
+            size="40",
+            price=Decimal("199.90"),
+            cost=Decimal("120.00"),
+            stock_minimum=2,
+            created_by="system",
+            updated_by="system",
+            active=True,
+        )
+        MovementInventory.objects.create(
+            variant=self.variant,
+            movement_type=MovementInventory.MovementType.PURCHASE,
+            quantity=8,
+            created_by="system",
+        )
+        ProductImage.objects.create(
+            product=self.product,
+            variant=self.variant,
+            image="products/store-variant.jpg",
+            is_primary=True,
+            alt_text="Imagen variante principal",
+            created_by="system",
+            updated_by="system",
+        )
+        self.product_b = Product.objects.create(
+            name="Botas Urbanas",
+            brand="Golos",
+            description="Segundo producto para filtros",
+            product_type="boots",
+            created_by="system",
+            updated_by="system",
+        )
+        self.variant_b = ProductVariant.objects.create(
+            product=self.product_b,
+            gender="female",
+            color="Cafe",
+            size="38",
+            price=Decimal("249.90"),
+            cost=Decimal("140.00"),
+            stock_minimum=1,
+            created_by="system",
+            updated_by="system",
+            active=True,
+        )
+        MovementInventory.objects.create(
+            variant=self.variant_b,
+            movement_type=MovementInventory.MovementType.PURCHASE,
+            quantity=4,
+            created_by="system",
+        )
+        self.product_c = Product.objects.create(
+            name="Sandalia Riviera",
+            brand="Costa",
+            description="Tercer producto para relacionados",
+            product_type="sandals",
+            created_by="system",
+            updated_by="system",
+        )
+        self.variant_c = ProductVariant.objects.create(
+            product=self.product_c,
+            gender="female",
+            color="Beige",
+            size="37",
+            price=Decimal("179.90"),
+            cost=Decimal("90.00"),
+            stock_minimum=1,
+            created_by="system",
+            updated_by="system",
+            active=True,
+        )
+        MovementInventory.objects.create(
+            variant=self.variant_c,
+            movement_type=MovementInventory.MovementType.PURCHASE,
+            quantity=3,
+            created_by="system",
+        )
+
+    def _checkout_as_customer(self, payload: dict):
+        self.client.force_authenticate(user=self.customer_user)
+        response = self.client.post(reverse("store-checkout"), payload, format="json")
+        self.client.force_authenticate(user=None)
+        return response
+
+    def test_store_products_list_is_public(self):
+        response = self.client.get(reverse("store-products"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_PRODUCTS_OK")
+        self.assertGreaterEqual(response.data["count"], 1)
+        self.assertIn("page", response.data)
+        self.assertIn("page_size", response.data)
+        returned_products = response.data["products"]
+        returned_names = [item["name"] for item in returned_products]
+        self.assertIn(self.product.name, returned_names)
+        target_product = next(item for item in returned_products if item["name"] == self.product.name)
+        self.assertIsNotNone(target_product["image_url"])
+        self.assertGreaterEqual(len(target_product["images"]), 1)
+
+    def test_store_cart_validate_returns_total_and_items(self):
+        payload = {"items": [{"variant_id": self.variant.id, "quantity": 2}]}
+
+        response = self.client.post(reverse("store-cart-validate"), payload, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_CART_VALID")
+        self.assertEqual(len(response.data["items"]), 1)
+        self.assertEqual(response.data["total"], "399.80")
+
+    def test_store_checkout_creates_pending_sale(self):
+        payload = {
+            "customer_name": "Cliente Web",
+            "customer_contact": "3001231234",
+            "items": [{"variant_id": self.variant.id, "quantity": 3}],
+            "is_order": True,
+        }
+
+        response = self._checkout_as_customer(payload)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["code"], "STORE_CHECKOUT_CREATED")
+
+        sale_id = response.data["order"]["sale_id"]
+        sale = Sale.objects.get(id=sale_id)
+        self.assertEqual(sale.status, "pending")
+        self.assertEqual(sale.created_by, self.customer_user.username)
+        self.assertEqual(sale.total, Decimal("599.70"))
+        self.assertEqual(sale.details.count(), 1)
+
+    def test_store_checkout_requires_authentication(self):
+        payload = {
+            "customer_name": "Cliente Web",
+            "customer_contact": "3001231234",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        response = self.client.post(reverse("store-checkout"), payload, format="json")
+        self.assertEqual(response.status_code, 401)
+
+    def test_store_checkout_fails_if_stock_is_insufficient(self):
+        payload = {
+            "customer_name": "Cliente Web",
+            "items": [{"variant_id": self.variant.id, "quantity": 99}],
+        }
+
+        response = self._checkout_as_customer(payload)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "STORE_CHECKOUT_FAILED")
+
+    def test_store_products_pagination_and_ordering(self):
+        response = self.client.get(f"{reverse('store-products')}?page=1&page_size=1&ordering=-name")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_PRODUCTS_OK")
+        self.assertEqual(response.data["page"], 1)
+        self.assertEqual(response.data["page_size"], 1)
+        self.assertTrue(response.data["has_next"])
+        self.assertEqual(len(response.data["products"]), 1)
+
+    def test_store_featured_products_endpoint(self):
+        response = self.client.get(reverse("store-featured-products"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_FEATURED_PRODUCTS_OK")
+        self.assertGreaterEqual(response.data["count"], 1)
+
+    def test_store_related_products_endpoint(self):
+        response = self.client.get(reverse("store-related-products", args=[self.product.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_RELATED_PRODUCTS_OK")
+        related_names = [item["name"] for item in response.data["products"]]
+        self.assertIn(self.product_b.name, related_names)
+
+    def test_store_order_status_with_contact(self):
+        checkout_payload = {
+            "customer_name": "Cliente Pedido",
+            "customer_contact": "3115557788",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        checkout_response = self._checkout_as_customer(checkout_payload)
+        sale_id = checkout_response.data["order"]["sale_id"]
+
+        status_url = f"{reverse('store-order-status', args=[sale_id])}?customer_contact=3115557788"
+        response = self.client.get(status_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_ORDER_STATUS_OK")
+        self.assertEqual(response.data["order"]["sale_id"], sale_id)
+        self.assertEqual(response.data["order"]["status"], "pending")
+        self.assertEqual(len(response.data["order"]["items"]), 1)
+
+    def test_store_order_status_requires_contact(self):
+        response = self.client.get(reverse("store-order-status", args=[99999]))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "STORE_ORDER_CONTACT_REQUIRED")
+
+    def test_store_order_lookup_by_sale_id(self):
+        checkout_payload = {
+            "customer_name": "Cliente Lookup ID",
+            "customer_contact": "3000001000",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        checkout_response = self._checkout_as_customer(checkout_payload)
+        sale_id = checkout_response.data["order"]["sale_id"]
+
+        response = self.client.get(f"{reverse('store-order-lookup')}?sale_id={sale_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_ORDER_LOOKUP_OK")
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["orders"][0]["sale_id"], sale_id)
+
+    def test_store_order_lookup_by_customer_returns_multiple(self):
+        for contact in ["3001002001", "3001002002"]:
+            payload = {
+                "customer_name": "Cliente Lookup",
+                "customer_contact": contact,
+                "items": [{"variant_id": self.variant.id, "quantity": 1}],
+                "is_order": True,
+            }
+            self._checkout_as_customer(payload)
+
+        response = self.client.get(
+            f"{reverse('store-order-lookup')}?customer=Cliente Lookup&customer_contact=3001002"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_ORDER_LOOKUP_OK")
+        self.assertGreaterEqual(response.data["count"], 2)
+
+    def test_store_order_lookup_by_customer_requires_contact_hint(self):
+        payload = {
+            "customer_name": "Cliente Privado",
+            "customer_contact": "3009898989",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        self._checkout_as_customer(payload)
+
+        response = self.client.get(f"{reverse('store-order-lookup')}?customer=Cliente Privado")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "STORE_ORDER_LOOKUP_CONTACT_REQUIRED")
+
+    def test_store_order_payment_confirms_payment_and_updates_status(self):
+        checkout_payload = {
+            "customer_name": "Cliente Pago",
+            "customer_contact": "3005557788",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        checkout_response = self._checkout_as_customer(checkout_payload)
+        sale_id = checkout_response.data["order"]["sale_id"]
+
+        pay_payload = {
+            "customer_contact": "3005557788",
+            "payment_method": "nequi",
+        }
+        with self.settings(
+            WOMPI_PUBLIC_KEY="pub_test_x",
+            WOMPI_INTEGRITY_SECRET="int_test_x",
+            WOMPI_REDIRECT_URL="http://localhost:8080/store/order-status",
+        ):
+            response = self.client.post(reverse("store-order-pay", args=[sale_id]), pay_payload, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_ORDER_PAYMENT_CHECKOUT_READY")
+        self.assertEqual(response.data["order"]["status"], "pending")
+        self.assertEqual(response.data["order"]["payment_status"], "pending")
+        self.assertIsNotNone(response.data["order"]["payment_reference"])
+        self.assertIn("checkout_url", response.data["payment"])
+        self.assertIn("checkout.wompi.co", response.data["payment"]["checkout_url"])
+
+    @patch("inventory.store.views.get_transaction")
+    def test_store_wompi_verify_updates_order_to_paid(self, mock_get_transaction):
+        checkout_payload = {
+            "customer_name": "Cliente Verify",
+            "customer_contact": "3001112222",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        checkout_response = self._checkout_as_customer(checkout_payload)
+        sale_id = checkout_response.data["order"]["sale_id"]
+        sale = Sale.objects.get(id=sale_id)
+        sale.payment_reference = "ORD-VERIFY-123"
+        sale.save(update_fields=["payment_reference"])
+
+        mock_get_transaction.return_value = {
+            "data": {
+                "id": "tx_test_123",
+                "status": "APPROVED",
+                "reference": "ORD-VERIFY-123",
+                "payment_method_type": "PSE",
+            }
+        }
+
+        verify_payload = {
+            "customer_contact": "3001112222",
+            "transaction_id": "tx_test_123",
+        }
+        response = self.client.post(reverse("store-order-wompi-verify", args=[sale_id]), verify_payload, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_WOMPI_PAYMENT_SYNCED")
+        self.assertEqual(response.data["order"]["status"], "paid")
+        self.assertEqual(response.data["order"]["payment_status"], "paid")
+
+    @override_settings(
+        STORE_AUTO_ADVANCE_ENABLED=True,
+        STORE_AUTO_TO_PROCESSING_MINUTES=0,
+        STORE_AUTO_TO_SHIPPED_MINUTES=99999,
+        STORE_AUTO_TO_DELIVERED_MINUTES=99999,
+        STORE_AUTO_TO_COMPLETED_MINUTES=99999,
+    )
+    def test_auto_advance_command_moves_paid_to_processing(self):
+        sale = Sale.objects.create(
+            customer="Cliente Auto",
+            created_by="store_api",
+            is_order=True,
+            status="paid",
+            payment_status="paid",
+            total=Decimal("100.00"),
+            paid_at=timezone.now() - timedelta(minutes=10),
+        )
+
+        call_command("auto_advance_store_orders")
+
+        sale.refresh_from_db()
+        self.assertEqual(sale.status, "processing")
+        self.assertIsNotNone(sale.confirmed_at)
+
+    @override_settings(STORE_AUTO_ADVANCE_ENABLED=False)
+    def test_auto_advance_command_respects_disabled_setting(self):
+        sale = Sale.objects.create(
+            customer="Cliente Auto Off",
+            created_by="store_api",
+            is_order=True,
+            status="paid",
+            payment_status="paid",
+            total=Decimal("100.00"),
+            paid_at=timezone.now() - timedelta(minutes=30),
+        )
+
+        call_command("auto_advance_store_orders")
+
+        sale.refresh_from_db()
+        self.assertEqual(sale.status, "paid")
+
+    def test_store_order_status_includes_timeline_and_status_detail(self):
+        checkout_payload = {
+            "customer_name": "Cliente Timeline",
+            "customer_contact": "3119990000",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        checkout_response = self._checkout_as_customer(checkout_payload)
+        sale_id = checkout_response.data["order"]["sale_id"]
+
+        response = self.client.get(
+            f"{reverse('store-order-status', args=[sale_id])}?customer_contact=3119990000"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_ORDER_STATUS_OK")
+        self.assertIn("status_detail", response.data["order"])
+        self.assertIn("timeline", response.data["order"])
+        self.assertGreaterEqual(len(response.data["order"]["timeline"]), 1)
+
+    def test_store_ops_orders_list_requires_auth_and_returns_orders(self):
+        unauth_response = self.client.get(reverse("store-ops-orders"))
+        self.assertEqual(unauth_response.status_code, 401)
+
+        self.client.force_authenticate(user=self.ops_user)
+        auth_response = self.client.get(reverse("store-ops-orders"))
+        self.assertEqual(auth_response.status_code, 200)
+        self.assertEqual(auth_response.data["code"], "STORE_OPS_ORDERS_OK")
+        self.assertIn("orders", auth_response.data)
+
+    def test_store_ops_can_update_order_status(self):
+        checkout_payload = {
+            "customer_name": "Cliente Ops",
+            "customer_contact": "3124445555",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        checkout_response = self._checkout_as_customer(checkout_payload)
+        sale_id = checkout_response.data["order"]["sale_id"]
+
+        self.client.force_authenticate(user=self.ops_user)
+        response = self.client.patch(
+            reverse("store-ops-order-status", args=[sale_id]),
+            {"status": "paid", "note": "Pago validado en caja"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_OPS_ORDER_STATUS_UPDATED")
+        self.assertEqual(response.data["order"]["status"], "paid")
+
+    def test_store_customer_register_and_login_endpoints(self):
+        register_payload = {
+            "username": "cliente_web_1",
+            "email": "cliente1@web.com",
+            "password": "secret1234",
+            "first_name": "Cliente",
+            "last_name": "Web",
+        }
+
+        register_response = self.client.post(reverse("store-customer-register"), register_payload, format="json")
+        self.assertEqual(register_response.status_code, 201)
+        self.assertEqual(register_response.data["code"], "STORE_CUSTOMER_REGISTERED")
+        self.assertIn("access", register_response.data)
+        self.assertIn("refresh", register_response.data)
+
+        user = User.objects.get(username="cliente_web_1")
+        self.assertTrue(user.groups.filter(name="Customers").exists())
+
+        login_response = self.client.post(
+            reverse("store-customer-login"),
+            {"username": "cliente_web_1", "password": "secret1234"},
+            format="json",
+        )
+        self.assertEqual(login_response.status_code, 200)
+        self.assertEqual(login_response.data["code"], "STORE_CUSTOMER_LOGIN_OK")
+        self.assertIn("access", login_response.data)
+
+    def test_store_checkout_uses_authenticated_user_as_creator(self):
+        customers_group, _ = Group.objects.get_or_create(name="Customers")
+        customer_user = User.objects.create_user(
+            username="cliente_auth",
+            email="cliente_auth@web.com",
+            password="secret1234",
+            is_staff=False,
+        )
+        customer_user.groups.add(customers_group)
+        self.client.force_authenticate(user=customer_user)
+
+        payload = {
+            "customer_name": "Cliente Auth",
+            "customer_contact": "3007770000",
+            "items": [{"variant_id": self.variant.id, "quantity": 1}],
+            "is_order": True,
+        }
+        response = self.client.post(reverse("store-checkout"), payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        sale_id = response.data["order"]["sale_id"]
+        sale = Sale.objects.get(id=sale_id)
+        self.assertEqual(sale.created_by, "cliente_auth")
+
+    def test_store_my_orders_returns_only_authenticated_customer_orders(self):
+        customer_user = User.objects.create_user(
+            username="cliente_orders",
+            email="cliente_orders@web.com",
+            password="secret1234",
+            is_staff=False,
+        )
+        Sale.objects.create(
+            customer="Cliente Orders",
+            created_by="cliente_orders",
+            is_order=True,
+            total=Decimal("10.00"),
+            status="pending",
+            payment_status="unpaid",
+        )
+        Sale.objects.create(
+            customer="Otro Cliente",
+            created_by="store_api",
+            is_order=True,
+            total=Decimal("12.00"),
+            status="pending",
+            payment_status="unpaid",
+        )
+
+        self.client.force_authenticate(user=customer_user)
+        response = self.client.get(reverse("store-my-orders"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_MY_ORDERS_OK")
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["orders"][0]["payment_status"], "unpaid")
+
+    @override_settings(
+        WOMPI_PUBLIC_KEY="pub_test",
+        WOMPI_INTEGRITY_SECRET="int_test",
+        WOMPI_EVENTS_SECRET="evt_test",
+        WOMPI_REDIRECT_URL="http://localhost:8080/store/order-status",
+        WOMPI_API_BASE_URL="https://sandbox.wompi.co/v1",
+    )
+    def test_store_wompi_health_configured(self):
+        response = self.client.get(reverse("store-wompi-health"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_WOMPI_HEALTH_OK")
+        self.assertTrue(response.data["configured"])
+        self.assertEqual(response.data["environment"], "sandbox")
+        self.assertEqual(response.data["missing"], [])
+
+    @override_settings(
+        WOMPI_PUBLIC_KEY="",
+        WOMPI_INTEGRITY_SECRET="",
+        WOMPI_EVENTS_SECRET="",
+        WOMPI_REDIRECT_URL="",
+    )
+    def test_store_wompi_health_reports_missing_keys(self):
+        response = self.client.get(reverse("store-wompi-health"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_WOMPI_HEALTH_OK")
+        self.assertFalse(response.data["configured"])
+        self.assertIn("WOMPI_PUBLIC_KEY", response.data["missing"])
+        self.assertIn("WOMPI_INTEGRITY_SECRET", response.data["missing"])
+
+    def test_store_branding_public_endpoint(self):
+        response = self.client.get(reverse("store-branding"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_BRANDING_OK")
+        self.assertIn("branding", response.data)
+        self.assertIn("store_name", response.data["branding"])
+
+    def test_store_ops_branding_update(self):
+        self.client.force_authenticate(user=self.ops_user)
+        payload = {
+            "store_name": "Golos Boutique",
+            "tagline": "Estilo premium para cada paso",
+            "logo_url": "https://example.com/logo.png",
+            "hero_title": "Coleccion nueva 2026",
+            "hero_subtitle": "Compra segura con entrega nacional",
+        }
+        response = self.client.patch(reverse("store-ops-branding"), payload, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["code"], "STORE_OPS_BRANDING_UPDATED")
+        self.assertEqual(response.data["branding"]["store_name"], "Golos Boutique")

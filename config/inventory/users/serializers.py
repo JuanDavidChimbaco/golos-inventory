@@ -15,32 +15,82 @@ class UserSerializer(serializers.ModelSerializer):
 class UserCreateSerializer(serializers.ModelSerializer):
     """Serializer para crear nuevos usuarios"""
     password = serializers.CharField(write_only=True, min_length=8)
+    groups = serializers.SerializerMethodField(read_only=True)
+    group_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Group.objects.all(),
+        many=True,
+        required=False,
+        source="groups",
+    )
     
     class Meta:
         model = User
-        fields = ["username", "email", "password", "is_staff"]
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "password",
+            "is_staff",
+            "groups",
+            "group_ids",
+        ]
+
+    def get_groups(self, obj):
+        return [{"id": group.id, "name": group.name} for group in obj.groups.all()]
     
     def create(self, validated_data):
+        groups = validated_data.pop("groups", [])
         password = validated_data.pop("password")
         user = User.objects.create_user(**validated_data)
         user.set_password(password)
         user.save()
+        if groups:
+            user.groups.set(groups)
         return user
 
 
 class UserManagementSerializer(serializers.ModelSerializer):
     """Serializer para gestionar usuarios existentes"""
+    groups = serializers.SerializerMethodField(read_only=True)
+    group_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Group.objects.all(),
+        many=True,
+        required=False,
+        source="groups",
+    )
+
     class Meta:
         model = User
-        fields = ["id", "username", "email", "is_staff", "is_active", "date_joined"]
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "is_staff",
+            "is_active",
+            "date_joined",
+            "groups",
+            "group_ids",
+        ]
         read_only_fields = ["id", "date_joined"]
+
+    def get_groups(self, obj):
+        return [{"id": group.id, "name": group.name} for group in obj.groups.all()]
 
 
 class UserMeSerializer(serializers.ModelSerializer):
     """Serializer para perfil propio"""
+    groups = serializers.SerializerMethodField()
+
+    def get_groups(self, obj):
+        return list(obj.groups.values_list("name", flat=True))
+
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "is_staff", "is_active"]
+        fields = ["id", "username", "email", "first_name", "last_name", "is_staff", "is_active", "groups"]
         read_only_fields = ["id", "username", "is_staff", "is_active"]
 
 

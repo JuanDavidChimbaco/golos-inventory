@@ -28,6 +28,28 @@ from drf_spectacular.views import (
 )
 from inventory import views, views_home
 from drf_spectacular.utils import extend_schema
+from inventory.store.views import (
+    StoreProductListView,
+    StoreProductDetailView,
+    StoreBrandingView,
+    StoreCustomerRegisterView,
+    StoreCustomerLoginView,
+    StoreMyOrdersView,
+    StoreFeaturedProductsView,
+    StoreRelatedProductsView,
+    StoreCartValidateView,
+    StoreCheckoutView,
+    StoreOrderLookupView,
+    StoreOrderStatusView,
+    StoreOrderPaymentView,
+    StoreWompiVerifyPaymentView,
+    StoreWompiWebhookView,
+    StoreWompiHealthView,
+    StoreOpsOrderListView,
+    StoreOpsOrderStatusUpdateView,
+    StoreOpsSummaryView,
+    StoreOpsBrandingView,
+)
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
@@ -169,6 +191,26 @@ urlpatterns = [
     path("api/token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     # API endpoints
     path("api/", include(router.urls)),
+    path("api/store/products/", StoreProductListView.as_view(), name="store-products"),
+    path("api/store/products/<int:product_id>/", StoreProductDetailView.as_view(), name="store-product-detail"),
+    path("api/store/branding/", StoreBrandingView.as_view(), name="store-branding"),
+    path("api/store/auth/register/", StoreCustomerRegisterView.as_view(), name="store-customer-register"),
+    path("api/store/auth/login/", StoreCustomerLoginView.as_view(), name="store-customer-login"),
+    path("api/store/me/orders/", StoreMyOrdersView.as_view(), name="store-my-orders"),
+    path("api/store/products/featured/", StoreFeaturedProductsView.as_view(), name="store-featured-products"),
+    path("api/store/products/<int:product_id>/related/", StoreRelatedProductsView.as_view(), name="store-related-products"),
+    path("api/store/cart/validate/", StoreCartValidateView.as_view(), name="store-cart-validate"),
+    path("api/store/checkout/", StoreCheckoutView.as_view(), name="store-checkout"),
+    path("api/store/orders/lookup/", StoreOrderLookupView.as_view(), name="store-order-lookup"),
+    path("api/store/orders/<int:sale_id>/", StoreOrderStatusView.as_view(), name="store-order-status"),
+    path("api/store/orders/<int:sale_id>/pay/", StoreOrderPaymentView.as_view(), name="store-order-pay"),
+    path("api/store/orders/<int:sale_id>/wompi/verify/", StoreWompiVerifyPaymentView.as_view(), name="store-order-wompi-verify"),
+    path("api/store/wompi/webhook/", StoreWompiWebhookView.as_view(), name="store-wompi-webhook"),
+    path("api/store/wompi/health/", StoreWompiHealthView.as_view(), name="store-wompi-health"),
+    path("api/store/ops/orders/", StoreOpsOrderListView.as_view(), name="store-ops-orders"),
+    path("api/store/ops/orders/<int:sale_id>/status/", StoreOpsOrderStatusUpdateView.as_view(), name="store-ops-order-status"),
+    path("api/store/ops/summary/", StoreOpsSummaryView.as_view(), name="store-ops-summary"),
+    path("api/store/ops/branding/", StoreOpsBrandingView.as_view(), name="store-ops-branding"),
     path("inventory/close-month/", views.InventoryCloseMonthView.as_view()),
     # API Documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

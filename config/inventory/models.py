@@ -248,14 +248,38 @@ class Sale(models.Model):
         max_length=20,
         choices=[
             ("pending", "Pending"),
+            ("paid", "Paid"),
+            ("processing", "Processing"),
+            ("shipped", "Shipped"),
+            ("delivered", "Delivered"),
             ("completed", "Completed"),
             ("canceled", "Canceled"),
         ],
         default="pending",
     )
+    payment_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("unpaid", "Unpaid"),
+            ("pending", "Pending"),
+            ("paid", "Paid"),
+            ("failed", "Failed"),
+            ("refunded", "Refunded"),
+        ],
+        default="unpaid",
+    )
+    payment_method = models.CharField(max_length=30, blank=True, null=True)
+    payment_reference = models.CharField(max_length=80, blank=True, null=True)
+    paid_at = models.DateTimeField(blank=True, null=True)
+    confirmed_at = models.DateTimeField(blank=True, null=True)
+    shipped_at = models.DateTimeField(blank=True, null=True)
+    delivered_at = models.DateTimeField(blank=True, null=True)
+    canceled_at = models.DateTimeField(blank=True, null=True)
+    status_notes = models.TextField(blank=True, null=True)
     is_order = models.BooleanField(default=False)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         permissions = [
@@ -391,3 +415,24 @@ class InventorySnapshot(models.Model):
 
     def __str__(self):
         return f"{self.variant} - {self.month} ({self.stock_closing})"
+
+
+class StoreBranding(models.Model):
+    """
+    Configuracion visual publica de la tienda online.
+    """
+
+    store_name = models.CharField(max_length=120, default="Mi Tienda")
+    tagline = models.CharField(max_length=180, blank=True, default="")
+    logo_url = models.URLField(blank=True, null=True)
+    hero_title = models.CharField(max_length=140, blank=True, default="")
+    hero_subtitle = models.CharField(max_length=220, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.CharField(max_length=50, blank=True, default="system")
+
+    class Meta:
+        verbose_name = "Store Branding"
+        verbose_name_plural = "Store Branding"
+
+    def __str__(self):
+        return self.store_name
