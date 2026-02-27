@@ -76,6 +76,14 @@ DEFAULT_STORE_BRANDING = {
     "logo_url": "",
     "hero_title": "Descubre tu siguiente par favorito",
     "hero_subtitle": "Compra facil, segura y con envio rapido en Colombia.",
+    "legal_representative_name": "",
+    "legal_id_type": "NIT",
+    "legal_id_number": "",
+    "legal_contact_email": "",
+    "legal_contact_phone": "",
+    "legal_contact_address": "",
+    "legal_contact_city": "",
+    "legal_contact_department": "",
 }
 
 CUSTOMER_GROUP_NAME = "Customers"

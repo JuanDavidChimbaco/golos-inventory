@@ -217,6 +217,14 @@ class StoreBrandingSerializer(serializers.ModelSerializer):
             "logo_url",
             "hero_title",
             "hero_subtitle",
+            "legal_representative_name",
+            "legal_id_type",
+            "legal_id_number",
+            "legal_contact_email",
+            "legal_contact_phone",
+            "legal_contact_address",
+            "legal_contact_city",
+            "legal_contact_department",
             "updated_at",
         ]
 
@@ -230,6 +238,14 @@ class StoreBrandingUpdateSerializer(serializers.ModelSerializer):
             "logo_url",
             "hero_title",
             "hero_subtitle",
+            "legal_representative_name",
+            "legal_id_type",
+            "legal_id_number",
+            "legal_contact_email",
+            "legal_contact_phone",
+            "legal_contact_address",
+            "legal_contact_city",
+            "legal_contact_department",
         ]
 
 
