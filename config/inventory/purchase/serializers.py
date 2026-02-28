@@ -2,7 +2,7 @@
     Serializers para la gestión de compras
 """
 from rest_framework import serializers
-from ..models import MovementInventory, Supplier, ProductVariant, Product
+from ..models import MovementInventory, Supplier, ProductVariant
 
 
 class VariantNestedSerializer(serializers.ModelSerializer):

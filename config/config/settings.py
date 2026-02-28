@@ -214,6 +214,10 @@ SPECTACULAR_SETTINGS = {
             'description': 'Gestión de grupos con permisos'
         },
         {
+            'name': 'Permissions',
+            'description': 'Gestión de permisos asignados a los grupos'
+        },
+        {
             'name': 'Sales',
             'description': 'Gestión de ventas y confirmación de pedidos'
         },
@@ -271,15 +275,15 @@ SPECTACULAR_SETTINGS = {
         },
         {
             'name': 'SuppliersReturns',
-            'description': 'Gestión de devoluciones a proveedores'
+            'description': 'Gestión de devoluciones a proveedores '
         },
         {
             'name': 'Dashboard',
-            'description': 'Dashboard de estadísticas y métricas'
+            'description': 'Dashboard de estadísticas y métricas de la Gestion del inventario'
         },
         {
             'name': 'Export',
-            'description': 'Exportaciones de datos'
+            'description': 'Exportaciones de datos (solo lectura) '
         },
         {
             'name': 'Notifications',
@@ -288,6 +292,10 @@ SPECTACULAR_SETTINGS = {
         {
             'name': 'Purchase',
             'description': 'Gestión de compras'
+        },
+        {
+            'name': 'Store',
+            'description': 'Gestión de la tienda en linea'
         }
     ],
 }

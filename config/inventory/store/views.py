@@ -99,6 +99,9 @@ CUSTOMER_GROUP_NAME = "Customers"
 
 
 def _to_decimal(value: object, default: str = "0") -> Decimal:
+    """
+    Convierte un valor a Decimal, utilizando el valor por defecto si no es posible.
+    """
     try:
         return Decimal(str(value))
     except Exception:
@@ -132,6 +135,9 @@ def _parse_shipping_cost_matrix(raw_value: str) -> list[tuple[str, int, Decimal]
 
 
 def _estimate_shipping_cost(shipping_zone: str, estimated_weight_grams: int) -> Decimal:
+    """ 
+    Estima el costo de envío basado en la zona y el peso estimado.
+    """
     matrix = _parse_shipping_cost_matrix(getattr(settings, "STORE_MARGIN_SHIPPING_COST_MATRIX", ""))
     normalized_zone = shipping_zone if shipping_zone in {"local", "regional", "national"} else "regional"
     normalized_weight = max(int(estimated_weight_grams), 1)
@@ -147,6 +153,9 @@ def _build_commercial_summary(
     shipping_zone: str,
     estimated_weight_grams: int | None,
 ) -> dict:
+    """
+    Construye un resumen comercial basado en los items normalizados.
+    """
     gross_total = sum((item["subtotal"] for item in normalized_items), start=Decimal("0.00"))
     product_cost_total = sum(
         (_to_decimal(getattr(item["variant"], "cost", 0)) * item["quantity"] for item in normalized_items),
@@ -196,6 +205,9 @@ def _build_commercial_summary(
 
 
 def _store_products_queryset():
+    """
+    Retorna un queryset con los productos disponibles para la tienda.
+    """
     available_variants = (
         ProductVariant.objects.filter(
             product=OuterRef("pk"),
@@ -232,6 +244,9 @@ def _store_products_queryset():
 
 
 def _parse_positive_int(value: str | None, default: int, max_value: int) -> int:
+    """
+    Parsea un valor a entero positivo, utilizando el valor por defecto si no es posible.
+    """
     try:
         parsed = int(value) if value is not None else default
     except (TypeError, ValueError):
@@ -242,6 +257,9 @@ def _parse_positive_int(value: str | None, default: int, max_value: int) -> int:
 
 
 def _resolve_image_url(image_field) -> str | None:
+    """
+    Resuelve la URL de una imagen, utilizando el nombre del archivo si no es posible.
+    """
     try:
         return image_field.url
     except Exception:
@@ -249,6 +267,9 @@ def _resolve_image_url(image_field) -> str | None:
 
 
 def _serialize_sale_items(sale: Sale) -> list[dict]:
+    """
+    Serializa los detalles de una venta.
+    """
     details = sale.details.select_related("variant__product").all()
     return [
         {
@@ -264,6 +285,9 @@ def _serialize_sale_items(sale: Sale) -> list[dict]:
 
 
 def _serialize_latest_shipment(sale: Sale) -> dict | None:
+    """
+    Serializa el último envío de una venta.
+    """
     shipment = sale.shipments.order_by("-created_at").first()
     if not shipment:
         return None
@@ -282,6 +306,9 @@ def _serialize_latest_shipment(sale: Sale) -> dict | None:
 
 
 def _status_detail(status_code: str) -> dict:
+    """
+    Retorna el detalle de un estado de pedido.
+    """
     meta = ORDER_STATUS_META.get(status_code, {"label": status_code, "stage": 0})
     return {
         "code": status_code,
@@ -291,6 +318,9 @@ def _status_detail(status_code: str) -> dict:
 
 
 def _order_timeline(sale: Sale) -> list[dict]:
+    """
+    Retorna el timeline de un pedido.
+    """
     timeline = [
         {
             "code": "created",
@@ -318,6 +348,9 @@ def _order_timeline(sale: Sale) -> list[dict]:
 
 
 def _serialize_store_order(sale: Sale) -> dict:
+    """
+    Serializa un pedido para la tienda.
+    """
     return {
         "sale_id": sale.id,
         "status": sale.status,
@@ -373,6 +406,9 @@ def _ensure_shipment_for_paid_order(sale: Sale, *, source: str) -> None:
 
 
 def _serialize_store_user(user: User) -> dict:
+    """
+    Serializa un usuario para la tienda.
+    """
     return {
         "id": user.id,
         "username": user.username,
@@ -386,6 +422,9 @@ def _serialize_store_user(user: User) -> dict:
 
 
 def _get_store_branding_instance() -> StoreBranding:
+    """
+    Retorna la instancia de StoreBranding para la tienda.
+    """
     branding = StoreBranding.objects.order_by("id").first()
     if branding:
         return branding
@@ -393,12 +432,18 @@ def _get_store_branding_instance() -> StoreBranding:
 
 
 def _ensure_store_wompi_ready() -> str | None:
+    """
+    Verifica si Wompi esta configurado en el servidor.
+    """
     if not settings.WOMPI_PUBLIC_KEY or not settings.WOMPI_INTEGRITY_SECRET:
         return "Wompi no esta configurado en el servidor"
     return None
 
 
 def _ensure_store_order_inventory_discounted(sale: Sale, *, source: str) -> None:
+    """
+    Verifica si la orden tiene items para descontar inventario.
+    """
     if not sale.is_order:
         return
 
@@ -458,6 +503,9 @@ def _ensure_store_order_inventory_discounted(sale: Sale, *, source: str) -> None
 
 
 def _apply_wompi_transaction_to_sale(sale: Sale, transaction_data: dict, source: str = "wompi_verify") -> None:
+    """
+    Aplica una transaccion de Wompi a una venta.
+    """
     status_map = {
         "APPROVED": ("paid", "paid"),
         "PENDING": ("pending", "pending"),
@@ -525,6 +573,18 @@ def _apply_wompi_transaction_to_sale(sale: Sale, transaction_data: dict, source:
 
 @extend_schema(tags=["Store"])
 class StoreProductListView(APIView):
+    """
+    Lista los productos disponibles para la tienda.
+    
+    Permisos:
+        - Todos los usuarios autenticados
+    
+    Parametros:
+        - q: Busqueda por nombre o marca
+        - brand: Filtro por marca
+        - product_type: Filtro por tipo de producto
+        - ordering: Ordenamiento
+    """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
@@ -573,6 +633,15 @@ class StoreProductListView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreProductDetailView(APIView):
+    """
+    Obtiene un producto disponible para la tienda.
+    
+    Permisos:
+        - Todos los usuarios autenticados
+    
+    Parametros:
+        - product_id: ID del producto
+    """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, product_id: int):
@@ -594,6 +663,15 @@ class StoreProductDetailView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreBrandingView(APIView):
+    """
+    Obtiene el branding de la tienda.
+    
+    Permisos:
+        - Todos los usuarios autenticados
+    
+    Parametros:
+        - None
+    """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
@@ -607,6 +685,8 @@ class StoreBrandingView(APIView):
 
 @extend_schema(tags=["StoreAuth"])
 class StoreCustomerRegisterView(APIView):
+    """ Registra un nuevo cliente para la tienda. 
+    """
     permission_classes = [permissions.AllowAny]
 
     @transaction.atomic
@@ -646,6 +726,7 @@ class StoreCustomerRegisterView(APIView):
 
 @extend_schema(tags=["StoreAuth"])
 class StoreCustomerLoginView(APIView):
+    """ Inicia sesion para un cliente registrado en la tienda. """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -671,6 +752,7 @@ class StoreCustomerLoginView(APIView):
 
 @extend_schema(tags=["StoreAuth"])
 class StoreMyOrdersView(APIView):
+    """ Obtiene los pedidos del cliente autenticado. """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
@@ -690,6 +772,7 @@ class StoreMyOrdersView(APIView):
 
 @extend_schema(tags=["StoreOps"])
 class StoreOpsBrandingView(APIView):
+    """ Obtiene el branding de la tienda. """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
@@ -728,6 +811,7 @@ class StoreOpsBrandingView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreFeaturedProductsView(APIView):
+    """ Obtiene los productos destacados para la tienda. """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
@@ -744,6 +828,7 @@ class StoreFeaturedProductsView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreRelatedProductsView(APIView):
+    """ Obtiene los productos relacionados para la tienda. """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, product_id: int):
@@ -772,6 +857,7 @@ class StoreRelatedProductsView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreCartValidateView(APIView):
+    """ Valida el carrito de compras para la tienda. """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -838,6 +924,7 @@ class StoreCartValidateView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreCheckoutView(APIView):
+    """ Realiza el checkout para la tienda. """
     permission_classes = [permissions.IsAuthenticated]
 
     @transaction.atomic
@@ -928,6 +1015,7 @@ class StoreCheckoutView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreOrderStatusView(APIView):
+    """ Obtiene el estado de un pedido para la tienda. """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, sale_id: int):
@@ -968,6 +1056,7 @@ class StoreOrderStatusView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreOrderLookupView(APIView):
+    """ Busca un pedido para la tienda. """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
@@ -1026,6 +1115,7 @@ class StoreOrderLookupView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreOrderPaymentView(APIView):
+    """ Paga un pedido para la tienda. """
     permission_classes = [permissions.AllowAny]
 
     @transaction.atomic
@@ -1134,6 +1224,7 @@ class StoreOrderPaymentView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreWompiVerifyPaymentView(APIView):
+    """ Verifica el pago por wompi de un pedido para la tienda. """
     permission_classes = [permissions.AllowAny]
 
     @transaction.atomic
@@ -1201,6 +1292,7 @@ class StoreWompiVerifyPaymentView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreWompiWebhookView(APIView):
+    """ Recibe webhooks de wompi para la tienda. """
     permission_classes = [permissions.AllowAny]
 
     @transaction.atomic
@@ -1256,6 +1348,7 @@ class StoreWompiWebhookView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreShippingWebhookView(APIView):
+    """ Recibe webhooks de transportadora para la tienda. """
     permission_classes = [permissions.AllowAny]
 
     @transaction.atomic
@@ -1389,6 +1482,7 @@ class StoreShippingWebhookView(APIView):
 
 @extend_schema(tags=["Store"])
 class StoreWompiHealthView(APIView):
+    """ Obtiene el estado de configuracion de Wompi para la tienda. """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
@@ -1447,6 +1541,7 @@ class StoreOpsOrderListView(APIView):
 
 @extend_schema(tags=["StoreOps"])
 class StoreOpsOrderStatusUpdateView(APIView):
+    """ Actualiza el estado de una orden para la tienda. """
     permission_classes = [permissions.IsAuthenticated]
 
     @transaction.atomic
@@ -1541,6 +1636,7 @@ class StoreOpsOrderStatusUpdateView(APIView):
 
 @extend_schema(tags=["StoreOps"])
 class StoreOpsSummaryView(APIView):
+    """ Obtiene el resumen operativo de la tienda. """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
@@ -1572,6 +1668,7 @@ class StoreOpsSummaryView(APIView):
 
 @extend_schema(tags=["StoreOps"])
 class StoreOpsManualShipmentView(APIView):
+    """ Registra una guia manual para la tienda. """
     permission_classes = [permissions.IsAuthenticated]
 
     @transaction.atomic

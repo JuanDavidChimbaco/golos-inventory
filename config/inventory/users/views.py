@@ -76,6 +76,11 @@ class GroupViewSet(viewsets.ModelViewSet):
 class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet de solo lectura para catálogo de permisos.
+    
+    - Lectura: Usuarios autenticados
+    - Creación: Usuarios con permiso add_permission
+    - Actualización: Usuarios con permiso change_permission
+    - Eliminación: Usuarios con permiso delete_permission
     """
     queryset = Permission.objects.select_related("content_type").all().order_by("content_type__app_label", "codename")
     permission_classes = [permissions.IsAuthenticated]
