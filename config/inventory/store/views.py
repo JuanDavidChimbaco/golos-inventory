@@ -74,6 +74,7 @@ DEFAULT_STORE_BRANDING = {
     "store_name": "Golos Store",
     "tagline": "Calzado y estilo para cada paso",
     "logo_url": "",
+    "favicon_url": "",
     "hero_title": "Descubre tu siguiente par favorito",
     "hero_subtitle": "Compra facil, segura y con envio rapido en Colombia.",
     "legal_representative_name": "",
@@ -84,6 +85,14 @@ DEFAULT_STORE_BRANDING = {
     "legal_contact_address": "",
     "legal_contact_city": "",
     "legal_contact_department": "",
+    "promo_top_enabled": False,
+    "promo_top_title": "",
+    "promo_top_text": "",
+    "promo_top_image_desktop_url": "",
+    "promo_top_image_mobile_url": "",
+    "promo_bottom_enabled": False,
+    "promo_bottom_title": "",
+    "promo_bottom_text": "",
 }
 
 CUSTOMER_GROUP_NAME = "Customers"

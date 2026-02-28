@@ -215,6 +215,7 @@ class StoreBrandingSerializer(serializers.ModelSerializer):
             "store_name",
             "tagline",
             "logo_url",
+            "favicon_url",
             "hero_title",
             "hero_subtitle",
             "legal_representative_name",
@@ -225,6 +226,14 @@ class StoreBrandingSerializer(serializers.ModelSerializer):
             "legal_contact_address",
             "legal_contact_city",
             "legal_contact_department",
+            "promo_top_enabled",
+            "promo_top_title",
+            "promo_top_text",
+            "promo_top_image_desktop_url",
+            "promo_top_image_mobile_url",
+            "promo_bottom_enabled",
+            "promo_bottom_title",
+            "promo_bottom_text",
             "updated_at",
         ]
 
@@ -236,6 +245,7 @@ class StoreBrandingUpdateSerializer(serializers.ModelSerializer):
             "store_name",
             "tagline",
             "logo_url",
+            "favicon_url",
             "hero_title",
             "hero_subtitle",
             "legal_representative_name",
@@ -246,6 +256,14 @@ class StoreBrandingUpdateSerializer(serializers.ModelSerializer):
             "legal_contact_address",
             "legal_contact_city",
             "legal_contact_department",
+            "promo_top_enabled",
+            "promo_top_title",
+            "promo_top_text",
+            "promo_top_image_desktop_url",
+            "promo_top_image_mobile_url",
+            "promo_bottom_enabled",
+            "promo_bottom_title",
+            "promo_bottom_text",
         ]
 
 
