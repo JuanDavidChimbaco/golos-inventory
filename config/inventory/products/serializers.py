@@ -22,13 +22,33 @@ class ProductImageSerializer(serializers.ModelSerializer):
         read_only_fields = ("created_at", "updated_at", "created_by", "updated_by")
 
     def get_url(self, obj):
+        """
+        Obtener la URL de la imagen almacenada.
+        
+        Args:
+            obj: Instancia de ProductImage
+            
+        Returns:
+            str or None: URL de la imagen o None si no se puede obtener
+        """
         try:
             return obj.image.url
         except Exception:
             return getattr(obj.image, "name", None)
 
     def validate_image(self, value):
-        """Validación y procesamiento de imagen"""
+        """
+        Validar y procesar la imagen usando el servicio de imágenes.
+        
+        Args:
+            value: Archivo de imagen a validar
+            
+        Returns:
+            file: Archivo de imagen validado
+            
+        Raises:
+            ValidationError: Si la imagen no es válida
+        """
         from ..core.services import ImageService
         
         try:
@@ -56,9 +76,29 @@ class ProductReadSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
 
     def get_variants(self, obj):
+        """
+        Obtener las variantes del producto que no están eliminadas.
+        
+        Args:
+            obj: Instancia de Product
+            
+        Returns:
+            list: Lista de variantes serializadas
+        """
         return ProductVariantSerializer(obj.variants.filter(is_deleted=False), many=True).data
 
     def get_image_url(self, obj):
+        """
+        Obtener la URL de la imagen principal del producto.
+        
+        Prioridad: imagen primaria del producto > imagen primaria de variante > primera imagen del producto > primera imagen.
+        
+        Args:
+            obj: Instancia de Product
+            
+        Returns:
+            str or None: URL de la imagen principal o None si no hay imágenes
+        """
         images = list(obj.images.all())
         if not images:
             return None

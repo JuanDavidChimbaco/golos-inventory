@@ -16,6 +16,15 @@ class VariantNestedSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'size', 'color', 'gender', 'gender_display', 'size_display', 'cost', 'active']
 
     def get_product(self, obj):
+        """
+        Obtiene información básica del producto asociado a la variante.
+        
+        Args:
+            obj: Instancia de ProductVariant
+            
+        Returns:
+            dict: Diccionario con id, name y brand del producto
+        """
         return {
             'id': obj.product.id,
             'name': obj.product.name,
@@ -46,6 +55,15 @@ class PurchaseDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at']
     
     def get_variant_info(self, obj):
+        """
+        Obtiene información formateada de la variante para display.
+        
+        Args:
+            obj: Instancia de MovementInventory
+            
+        Returns:
+            str: Información de género, color y talla
+        """
         return f"{obj.variant.get_gender_display()} - {obj.variant.color} - {obj.variant.size}"
 
 
@@ -66,9 +84,27 @@ class PurchaseSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'created_by', 'movement_type']
     
     def get_unit_cost(self, obj):
+        """
+        Obtiene el costo unitario de la variante.
+        
+        Args:
+            obj: Instancia de MovementInventory
+            
+        Returns:
+            Decimal: Costo unitario de la variante
+        """
         return obj.variant.cost
     
     def get_total_cost(self, obj):
+        """
+        Calcula el costo total de la compra (cantidad * costo unitario).
+        
+        Args:
+            obj: Instancia de MovementInventory
+            
+        Returns:
+            Decimal: Costo total de la compra
+        """
         return obj.quantity * obj.variant.cost
     
     def create(self, validated_data):
@@ -86,7 +122,18 @@ class PurchaseCreateSerializer(serializers.ModelSerializer):
         fields = ['variant', 'supplier', 'quantity', 'observation']
     
     def validate_quantity(self, value):
-        """Validar que la cantidad sea positiva para compras"""
+        """
+        Validar que la cantidad sea positiva para compras.
+        
+        Args:
+            value: Cantidad a validar
+            
+        Returns:
+            int: Cantidad validada
+            
+        Raises:
+            ValidationError: Si la cantidad no es positiva
+        """
         if value <= 0:
             raise serializers.ValidationError("La cantidad debe ser mayor a cero para compras.")
         return value
@@ -108,7 +155,18 @@ class BulkPurchaseSerializer(serializers.Serializer):
     )
     
     def validate_items(self, value):
-        """Validar que cada item tenga los campos necesarios"""
+        """
+        Validar que cada item tenga los campos necesarios y cantidades válidas.
+        
+        Args:
+            value: Lista de items a validar
+            
+        Returns:
+            list: Lista de items validados
+            
+        Raises:
+            ValidationError: Si algún item no tiene campos requeridos o cantidad inválida
+        """
         for item in value:
             if 'variant' not in item or 'quantity' not in item:
                 raise serializers.ValidationError("Cada item debe tener 'variant' y 'quantity'")

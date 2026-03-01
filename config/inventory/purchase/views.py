@@ -44,11 +44,23 @@ class PurchaseViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
     
     def get_serializer_class(self):
+        """
+        Obtener el serializer class según la acción.
+        
+        Returns:
+            Serializer: PurchaseCreateSerializer para creación, PurchaseSerializer para otros
+        """
         if self.action == 'create':
             return PurchaseCreateSerializer
         return PurchaseSerializer
     
     def get_queryset(self):
+        """
+        Obtener el queryset de compras con filtros aplicados desde query params.
+        
+        Returns:
+            QuerySet: Movimientos de inventario de tipo PURCHASE filtrados
+        """
         queryset = super().get_queryset()
         
         # Filtros simples
@@ -72,6 +84,15 @@ class PurchaseViewSet(viewsets.ModelViewSet):
         return queryset
     
     def create(self, request, *args, **kwargs):
+        """
+        Crear una nueva compra usando el servicio de compras.
+        
+        Args:
+            request: Request object
+            
+        Returns:
+            Response: Compra creada o error
+        """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -101,6 +122,15 @@ class PurchaseViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'])
     def bulk_purchase(self, request):
+        """
+        Crear múltiples compras en una sola operación.
+        
+        Args:
+            request: Request con supplier, observation y lista de items
+            
+        Returns:
+            Response: Compras creadas o error
+        """
         serializer = BulkPurchaseSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
             return error_response(
@@ -143,6 +173,15 @@ class PurchaseViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def purchase_stats(self, request):
+        """
+        Obtener estadísticas de compras: totales, por proveedor y producto, y resumen diario.
+        
+        Args:
+            request: Request con query params para filtros
+            
+        Returns:
+            Response: Estadísticas de compras
+        """
         queryset = self.get_queryset()
         
         return Response({
@@ -162,6 +201,15 @@ class PurchaseViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def supplier_purchases(self, request):
+        """
+        Obtener todas las compras de un proveedor específico.
+        
+        Args:
+            request: Request con supplier_id en query params
+            
+        Returns:
+            Response: Compras del proveedor o error
+        """
         if not (supplier_id := request.query_params.get('supplier_id')):
             return error_response(
                 detail='Se requiere supplier_id',
@@ -191,6 +239,16 @@ class PurchaseViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def reverse_purchase(self, request, pk=None):
+        """
+        Revertir una compra creando una devolución a proveedor.
+        
+        Args:
+            request: Request con reason opcional
+            pk: ID de la compra a revertir
+            
+        Returns:
+            Response: Devolución creada o error
+        """
         try:
             purchase = self.get_object()
             reason = request.data.get('reason', 'Devolución de compra')

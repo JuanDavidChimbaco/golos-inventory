@@ -107,6 +107,15 @@ class SupplierReturnSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'created_by']
     
     def get_variant_info(self, obj):
+        """
+        Obtener información formateada de la variante para display.
+        
+        Args:
+            obj: Instancia de MovementInventory
+            
+        Returns:
+            str: Información de género, color y talla
+        """
         return f"{obj.variant.get_gender_display()} - {obj.variant.color} - {obj.variant.size}"
 
 
@@ -120,7 +129,18 @@ class SupplierReturnBulkSerializer(serializers.Serializer):
     )
     
     def validate_items(self, value):
-        """Validar items de devolución masiva"""
+        """
+        Validar items de devolución masiva, incluyendo existencia de variante y stock disponible.
+        
+        Args:
+            value: Lista de items a validar
+            
+        Returns:
+            list: Lista de items validados
+            
+        Raises:
+            ValidationError: Si algún item no tiene campos requeridos, cantidad inválida o stock insuficiente
+        """
         for item in value:
             if 'variant' not in item or 'quantity' not in item:
                 raise serializers.ValidationError("Cada item debe tener 'variant' y 'quantity'")

@@ -38,9 +38,27 @@ class UserCreateSerializer(serializers.ModelSerializer):
         ]
 
     def get_groups(self, obj):
+        """
+        Obtener lista de grupos del usuario con id y nombre.
+        
+        Args:
+            obj: Instancia de User
+            
+        Returns:
+            list: Lista de diccionarios con id y name de cada grupo
+        """
         return [{"id": group.id, "name": group.name} for group in obj.groups.all()]
     
     def create(self, validated_data):
+        """
+        Crear un nuevo usuario asignando grupos y contraseña.
+        
+        Args:
+            validated_data: Datos validados del usuario
+            
+        Returns:
+            User: Instancia del usuario creado
+        """
         groups = validated_data.pop("groups", [])
         password = validated_data.pop("password")
         user = User.objects.create_user(**validated_data)
@@ -78,6 +96,15 @@ class UserManagementSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "date_joined"]
 
     def get_groups(self, obj):
+        """
+        Obtener lista de grupos del usuario con id y nombre.
+        
+        Args:
+            obj: Instancia de User
+            
+        Returns:
+            list: Lista de diccionarios con id y name de cada grupo
+        """
         return [{"id": group.id, "name": group.name} for group in obj.groups.all()]
 
 
@@ -86,6 +113,15 @@ class UserMeSerializer(serializers.ModelSerializer):
     groups = serializers.SerializerMethodField()
 
     def get_groups(self, obj):
+        """
+        Obtener lista de nombres de grupos del usuario.
+        
+        Args:
+            obj: Instancia de User
+            
+        Returns:
+            list: Lista de nombres de grupos
+        """
         return list(obj.groups.values_list("name", flat=True))
 
     class Meta:
@@ -100,6 +136,18 @@ class UserMePasswordSerializer(serializers.Serializer):
     new_password = serializers.CharField(write_only=True, min_length=8)
 
     def validate_old_password(self, value):
+        """
+        Validar que la contraseña antigua proporcionada sea correcta.
+        
+        Args:
+            value: Contraseña antigua a validar
+            
+        Returns:
+            str: Contraseña antigua validada
+            
+        Raises:
+            ValidationError: Si la contraseña antigua no es correcta
+        """
         user = self.context["request"].user
         if not user.check_password(value):
             raise serializers.ValidationError("La contraseña actual no es correcta.")
@@ -118,6 +166,15 @@ class GroupSerializer(serializers.ModelSerializer):
     )
 
     def get_permissions(self, obj):
+        """
+        Obtener lista de permisos del grupo con detalles.
+        
+        Args:
+            obj: Instancia de Group
+            
+        Returns:
+            list: Lista de diccionarios con detalles de cada permiso
+        """
         return [
             {
                 "id": perm.id,

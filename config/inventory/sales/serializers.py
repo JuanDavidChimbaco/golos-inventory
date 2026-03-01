@@ -33,6 +33,15 @@ class SaleDetailCreateSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        """
+        Crear un detalle de venta y actualizar el total de la venta.
+        
+        Args:
+            validated_data: Datos validados del detalle
+            
+        Returns:
+            SaleDetail: Instancia creada del detalle
+        """
         quantity = validated_data["quantity"]
         price = validated_data["price"]
         validated_data["subtotal"] = quantity * price
@@ -74,6 +83,15 @@ class SaleCreateSerializer(serializers.ModelSerializer):
         return value.strip().upper()
 
     def create(self, validated_data):
+        """
+        Crear una venta asignando automáticamente el usuario actual y marcando como pagada.
+        
+        Args:
+            validated_data: Datos validados de la venta
+            
+        Returns:
+            Sale: Instancia creada de la venta
+        """
         # Asignar automáticamente el usuario actual como created_by
         request = self.context.get('request')
         if request and request.user:
@@ -101,6 +119,15 @@ class SaleDetailReadSerializer(serializers.ModelSerializer):
         fields = ["id", "sale", "variant", "quantity", "price", "subtotal"]
 
     def get_variant(self, obj):
+        """
+        Obtener datos serializados de la variante del producto.
+        
+        Args:
+            obj: Instancia de SaleDetail
+            
+        Returns:
+            dict: Datos de la variante serializados
+        """
         from ..products.serializers import ProductVariantSerializer
         return ProductVariantSerializer(obj.variant).data
 
@@ -128,7 +155,18 @@ class SaleReturnCreateSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=200, required=False, allow_blank=True)
 
     def validate_sale_id(self, value):
-        """Validar que la venta exista y esté completada"""
+        """
+        Validar que la venta exista y esté completada para poder devolver.
+        
+        Args:
+            value: ID de la venta
+            
+        Returns:
+            int: ID validado
+            
+        Raises:
+            ValidationError: Si la venta no existe o no está completada
+        """
         try:
             sale = Sale.objects.get(id=value)
             if sale.status != "completed":
@@ -138,7 +176,18 @@ class SaleReturnCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("La venta no existe")
 
     def validate_items(self, items):
-        """Validar que los items sean válidos"""
+        """
+        Validar que los items de devolución sean válidos y no excedan cantidades originales.
+        
+        Args:
+            items: Lista de items a devolver
+            
+        Returns:
+            list: Lista de items validados
+            
+        Raises:
+            ValidationError: Si algún item es inválido o excede cantidad
+        """
         for item in items:
             try:
                 detail = SaleDetail.objects.get(id=item['sale_detail_id'])
@@ -167,5 +216,14 @@ class SaleReturnSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'created_by']
     
     def get_variant_info(self, obj):
+        """
+        Obtener información formateada de la variante para display.
+        
+        Args:
+            obj: Instancia de MovementInventory
+            
+        Returns:
+            str: Información de género, color y talla
+        """
         return f"{obj.variant.get_gender_display()} - {obj.variant.color} - {obj.variant.size}"
     

@@ -223,6 +223,12 @@ class ProductVariant(models.Model):
     
     @property
     def stock(self):
+        """
+        Calcula el stock actual de la variante sumando todos los movimientos de inventario.
+        
+        Returns:
+            int: Stock actual (positivo para entradas, negativo para salidas)
+        """
         return self.movements.aggregate(
             total=Sum("quantity")
         )["total"] or 0

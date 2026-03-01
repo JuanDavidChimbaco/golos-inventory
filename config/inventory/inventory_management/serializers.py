@@ -68,9 +68,24 @@ class InventoryHistorySerializer(serializers.ModelSerializer):
         ).aggregate(total=Sum('quantity'))['total'] or 0
 
     def get_stock_before(self, obj):
+        """
+        Calcular stock antes del movimiento actual.
+        
+        Returns:
+            int: Stock antes del movimiento
+        """
         return self.get_stock_after(obj) - obj.quantity
 
     def get_movement_type_display(self, obj):
+        """
+        Obtener la representación en español del tipo de movimiento.
+        
+        Args:
+            obj: Instancia de MovementInventory
+            
+        Returns:
+            str: Nombre del tipo de movimiento en español
+        """
         mapping = {
             "purchase": "Compra",
             "adjustment": "Ajuste",
@@ -108,6 +123,15 @@ class InventoryHistorySerializer(serializers.ModelSerializer):
         return "gray"
 
     def get_icon(self, obj):
+        """
+        Obtener icono sugerido para UI según el tipo de movimiento.
+        
+        Args:
+            obj: Instancia de MovementInventory
+            
+        Returns:
+            str: Icono emoji representativo
+        """
         if obj.movement_type in ["purchase", "sale_return", "return"]:
             return "⬆️"
         if obj.movement_type in ["sale_out","sale"]:

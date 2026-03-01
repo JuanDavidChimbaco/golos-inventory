@@ -26,7 +26,17 @@ class DashboardViewSet(viewsets.GenericViewSet):
     @extend_schema(tags=['Dashboard'])
     @action(detail=False, methods=['get'])
     def overview(self, request):
-        """Vista general del dashboard"""
+        """
+        Vista general del dashboard con estadísticas principales del sistema.
+        
+        Incluye métricas de productos, ventas, compras, proveedores e inventario.
+        
+        Args:
+            request: Request object
+            
+        Returns:
+            Response: Estadísticas del dashboard
+        """
         today = timezone.now().date()
         last_month = today - timedelta(days=30)
         last_week = today - timedelta(days=7)

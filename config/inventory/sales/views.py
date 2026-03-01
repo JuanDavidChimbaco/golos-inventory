@@ -49,6 +49,12 @@ class SaleViewSet(viewsets.ModelViewSet):
     ordering = ["-created_at"]
 
     def get_serializer_class(self):
+        """
+        Obtener el serializer class según la acción.
+        
+        Returns:
+            Serializer: SaleReadSerializer para list/retrieve, SaleCreateSerializer para otros
+        """
         if self.action in ["list", "retrieve"]:
             return SaleReadSerializer
         return SaleCreateSerializer
@@ -165,6 +171,12 @@ class SaleReturnViewSet(viewsets.ModelViewSet):
     ]
 
     def get_serializer_class(self):
+        """
+        Obtener el serializer class según la acción.
+        
+        Returns:
+            Serializer: SaleReturnCreateSerializer para create/create_sale_return, SaleReturnSerializer para otros
+        """
         if self.action in ["create", "create_sale_return"]:
             return SaleReturnCreateSerializer
         return SaleReturnSerializer
@@ -344,6 +356,12 @@ class SaleDetailViewSet(viewsets.ModelViewSet):
         ).select_related("sale", "variant", "variant__product")
 
     def get_serializer_class(self):
+        """
+        Obtener el serializer class según la acción.
+        
+        Returns:
+            Serializer: SaleDetailReadSerializer para list/retrieve, SaleDetailCreateSerializer para otros
+        """
         if self.action in ["list", "retrieve"]:
             return SaleDetailReadSerializer
         return SaleDetailCreateSerializer

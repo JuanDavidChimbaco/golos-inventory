@@ -35,6 +35,12 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering = ['name']
     
     def get_serializer_class(self):
+        """
+        Obtener el serializer class según la acción.
+        
+        Returns:
+            Serializer: ProductReadSerializer para list/retrieve, ProductSerializer para otros
+        """
         if self.action in ['list', 'retrieve']:
             return ProductReadSerializer
         return ProductSerializer
@@ -56,9 +62,24 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
     ordering = ['product__name', 'color', 'size']
     
     def get_queryset(self):
+        """
+        Obtener el queryset de variantes filtrando las no eliminadas.
+        
+        Returns:
+            QuerySet: Variantes de producto no eliminadas
+        """
         return super().get_queryset().filter(is_deleted=False)
     
     def destroy(self, request, *args, **kwargs):
+        """
+        Marcar la variante como eliminada (soft delete).
+        
+        Args:
+            request: Request object
+            
+        Returns:
+            Response: 204 No Content
+        """
         instance = self.get_object()
         instance.is_deleted = True
         instance.save()
@@ -98,5 +119,10 @@ class ProductImageViewSet(viewsets.ModelViewSet):
             raise DRFValidationError(f"Error procesando imagen: {str(e)}")
 
     def perform_update(self, serializer):
-        """Actualiza metadatos de usuario"""
+        """
+        Actualizar imagen y registrar usuario que modifica.
+        
+        Args:
+            serializer: Serializer instance
+        """
         serializer.save(updated_by=self.request.user.username)

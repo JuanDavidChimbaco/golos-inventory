@@ -105,6 +105,15 @@ class InventoryReportDailyViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def list(self, request, *args, **kwargs):
+        """
+        Obtener resumen diario de inventario entre fechas opcionales.
+        
+        Args:
+            request: Request con query params start y end
+            
+        Returns:
+            Response: Resumen diario serializado
+        """
         start = request.query_params.get("start")
         end = request.query_params.get("end")
 
@@ -162,6 +171,15 @@ class InventoryCloseMonthView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        """
+        Cerrar mes de inventario creando snapshots mensuales.
+        
+        Args:
+            request: Request con data month (YYYY-MM-DD)
+            
+        Returns:
+            Response: Éxito o error
+        """
         month = request.data.get("month")  # "2026-01-01"
         if not month:
             return error_response(

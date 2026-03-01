@@ -34,6 +34,12 @@ class SupplierViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
 
     def get_serializer_class(self):
+        """
+        Obtener el serializer class según la acción.
+        
+        Returns:
+            Serializer: SupplierSimpleSerializer para list, SupplierSerializer para otros
+        """
         if self.action in ['list']:
             return SupplierSimpleSerializer
         return SupplierSerializer
@@ -115,11 +121,23 @@ class SupplierReturnViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, permissions.DjangoModelPermissions]
     
     def get_serializer_class(self):
+        """
+        Obtener el serializer class según la acción.
+        
+        Returns:
+            Serializer: SupplierReturnCreateSerializer para create, SupplierReturnSerializer para otros
+        """
         if self.action == 'create':
             return SupplierReturnCreateSerializer
         return SupplierReturnSerializer
     
     def get_queryset(self):
+        """
+        Obtener el queryset de devoluciones con filtros aplicados desde query params.
+        
+        Returns:
+            QuerySet: Movimientos de inventario de tipo RETURN filtrados
+        """
         queryset = super().get_queryset()
         
         # Filtrar por proveedor
