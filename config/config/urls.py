@@ -51,6 +51,7 @@ from inventory.store.views import (
     StoreOpsSummaryView,
     StoreOpsBrandingView,
 )
+from inventory import views
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
