@@ -26,7 +26,6 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
     SpectacularRedocView,
 )
-from inventory import views, views_home
 from drf_spectacular.utils import extend_schema
 from inventory.store.views import (
     StoreProductListView,
@@ -77,7 +76,7 @@ class CustomTokenRefreshView(TokenRefreshView):
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
-router = routers.DefaultRouter()
+router = routers.SimpleRouter()
 router.register(
     r"users", 
     views.UserViewSet, 
@@ -185,7 +184,6 @@ router.register(
 )
 
 urlpatterns = [
-    path("", views_home.HomeView.as_view(), name="home"),
     path("admin/", admin.site.urls),
     # JWT Authentication
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
