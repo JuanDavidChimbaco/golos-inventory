@@ -1,33 +1,28 @@
-# Usamos Python 3.12 (una versión más moderna que la de tu Debian)
 FROM python:3.12-slim
 
-# Variables de entorno para optimizar Python en Docker
+# Evita archivos .pyc y asegura logs en tiempo real
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+# Forzamos el uso de la configuración de producción
+ENV DJANGO_SETTINGS_MODULE=config.settings_production
 
-# Directorio de trabajo dentro del contenedor
 WORKDIR /app
 
-# Instalamos dependencias del sistema necesarias para psycopg2 y Pillow
+# Instalamos solo lo necesario y LIMPIAMOS después
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
     python3-dev \
     libjpeg-dev \
     zlib1g-dev \
+    && pip install --no-cache-dir gunicorn whitenoise \
+    && apt-get purge -y --auto-remove gcc python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalamos las dependencias de Python
-# Copiamos ambos archivos como mencionaste
-COPY requirements.txt .
 COPY requirements-prod.txt .
 RUN pip install --no-cache-dir -r requirements-prod.txt
 
-# Copiamos el código de tu proyecto
 COPY . .
 
-# Exponemos el puerto donde correrá Gunicorn
-EXPOSE 8000
-
-# Comando para iniciar Gunicorn (Ajusta 'config.wsgi' si tu carpeta principal se llama distinto)
+# Comando final optimizado
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--pythonpath", "config", "config.wsgi:application"]
