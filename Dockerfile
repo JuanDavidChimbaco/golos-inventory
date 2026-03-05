@@ -30,4 +30,4 @@ COPY . .
 EXPOSE 8000
 
 # Comando para iniciar Gunicorn (Ajusta 'config.wsgi' si tu carpeta principal se llama distinto)
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "config.wsgi:application"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--pythonpath", "config", "config.wsgi:application"]
