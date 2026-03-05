@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: golos_app
+    # Conexión al Postgres del Host (Debian)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./config/staticfiles:/app/config/staticfiles
+      - ./media:/app/media
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    restart: always
+
+volumes:
+  static_volume:
