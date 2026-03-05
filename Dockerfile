@@ -24,6 +24,8 @@ COPY requirements-prod.txt .
 RUN pip install --no-cache-dir -r requirements-prod.txt
 
 COPY . .
+# Recolecta archivos estáticos sin preguntar
+RUN python config/manage.py collectstatic --noinput --settings=config.settings_production
 
 # Comando final optimizado
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--pythonpath", "config", "config.wsgi:application"]
