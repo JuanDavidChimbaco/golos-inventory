@@ -2,8 +2,8 @@
 FROM python:3.12-slim
 
 # Variables de entorno para optimizar Python en Docker
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 # Directorio de trabajo dentro del contenedor
 WORKDIR /app
