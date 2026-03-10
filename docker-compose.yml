@@ -1,20 +1,35 @@
-version: '3.8'
+name: golos-inventory
 
 services:
-  web:
-    build: .
-    container_name: golos_app
-    # Conexión al Postgres del Host (Debian)
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - ./config/staticfiles:/app/config/staticfiles
-      - ./media:/app/media
+  app:
+    image: toothiertrain13/golos-app:latest
+    container_name: golos-app
+    restart: unless-stopped
     env_file:
-      - .env
+      - .env                          # ← toda la config viene de aquí
     ports:
       - "8000:8000"
-    restart: always
+    networks:
+      - red_ingenieria
+    command:
+      - gunicorn
+      - --bind
+      - 0.0.0.0:8000
+      - --workers
+      - "2"
+      - --timeout
+      - "120"
+      - --worker-tmp-dir
+      - /dev/shm
+      - --pythonpath
+      - config
+      - config.wsgi:application
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/admin/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-volumes:
-  static_volume:
+networks:
+  red_ingenieria:
+    external: true

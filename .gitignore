@@ -9,8 +9,7 @@ db.sqlite3-journal
 /media
 /static
 .env
-.env.local
-.env.production
+.env.dev
 /staticfiles
 staticfiles/
 media/
