@@ -1,24 +1,18 @@
 # Golos Inventory
 
-Sistema de inventario, ventas y tienda online (Django + DRF) con permisos por grupos y flujo de pedidos para e-commerce.
+Sistema de inventario, ventas y tienda online (Django + DRF) con permisos por grupos y flujo de pedidos e-commerce.
 
-## Estado actual
-
-- Backend modular con API REST y JWT.
-- Tienda publica (`/api/store/*`) con:
-  - catalogo, carrito y checkout
-  - pagos Wompi (pay, verify y webhook)
-  - operacion StoreOps (resumen, pedidos, cambios de estado)
-  - registro de guia manual y webhook de transportadora
-- Control de inventario conectado al flujo de ordenes (descuento de stock en estados de pago/proceso).
+## Estado Actual
+- **Backend**: API REST con JWT y arquitectura modular
+- **Tienda Pública** (`/api/store/*`): catálogo, carrito, checkout y pagos Wompi
+- **Operaciones StoreOps**: gestión de pedidos, estados y guías
+- **Inventario**: control automático de stock conectado al flujo de ventas
 
 ## Requisitos
-
 - Python 3.11+
-- pip
-- Entorno virtual
+- pip y entorno virtual
 
-## Inicio rapido (local)
+## Inicio Rápido (Local)
 
 ```bash
 git clone https://github.com/JuanDavidChimbaco/golos-inventory.git
@@ -28,67 +22,38 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 cd config
-python manage.py migrate
-python manage.py shell < inventory/scripts/setup_permissions.py
-python manage.py runserver
+python manage.py migrate --settings=config.settings_dev
+python manage.py setup_permissions --settings=config.settings_dev
+python manage.py createsuperuser --settings=config.settings_dev
+python manage.py runserver --settings=config.settings_dev
 ```
 
-## URLs utiles
+**Nota**: Usa `--settings=config.settings_dev` en todos los comandos. Para producción, consulta `README_PRODUCTION.md`.
 
-- Swagger: `http://127.0.0.1:8000/api/docs/`
-- ReDoc: `http://127.0.0.1:8000/api/redoc/`
-- Admin: `http://127.0.0.1:8000/admin/`
+## URLs Útiles
+- **API Docs**: `http://127.0.0.1:8000/api/docs/`
+- **Admin**: `http://127.0.0.1:8000/admin/`
 
-## Grupos base
+## Grupos de Permisos
+`setup_permissions` crea: `Customers`, `Sales`, `Inventory`, `StoreOps`, `Managers`
 
-El script `inventory/scripts/setup_permissions.py` crea/actualiza:
+## Configuración de Entorno
+**Archivo base**: `config/.env.example` (copia como `.env` y ajusta según ambiente)
 
-- `Customers`
-- `Sales`
-- `Inventory`
-- `StoreOps`
-- `Managers`
+**Variables esenciales**:
+- `DEBUG=False` (producción) / `DEBUG=True` (desarrollo)
+- `ALLOWED_HOSTS=...` (dominios en producción)
+- Configuración DB y llaves Wompi
+- Variables de shipping/store margin
 
-## Variables de entorno clave
-
-Revisa y completa:
-
-- `config/.env.local`
-- `config/.env.production`
-- `config/.env.local.example`
-- `config/.env.production.example`
-
-Especialmente para produccion:
-
-- `DEBUG=False`
-- `ALLOWED_HOSTS=...`
-- configuracion DB
-- llaves Wompi (public/private/events/integrity segun ambiente)
-- variables de shipping/store margin
-
-## Comandos operativos recomendados
-
+## Comandos Operativos
 ```bash
-# validar proyecto
-python manage.py check
-
-# aplicar migraciones
-python manage.py migrate
-
-# tests (ejemplo)
-python manage.py test inventory.tests.StorePublicApiTest
+python manage.py check          # Validar proyecto
+python manage.py migrate       # Aplicar migraciones
+python manage.py test          # Ejecutar tests
 ```
 
-## Documentacion interna
+## Documentación
+- **App inventory**: `config/inventory/README.md`
+- **Producción**: `README_PRODUCTION.md`
 
-- App inventory: `config/inventory/README.md`
-- Scripts: `config/inventory/scripts/README.md`
-- Produccion: `README_PRODUCTION.md`
-
-## Nota importante
-
-Cada vez que bajes cambios nuevos en servidor, ejecuta siempre:
-
-1. `pip install -r requirements.txt` (si hubo cambios)
-2. `python manage.py migrate`
-3. reinicio de servicio (gunicorn/uvicorn y nginx)
