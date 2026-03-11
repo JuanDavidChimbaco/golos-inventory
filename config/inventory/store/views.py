@@ -43,6 +43,7 @@ from .serializers import (
     StoreCustomerRegisterSerializer,
     StoreOpsManualShipmentSerializer,
     StoreProductSerializer,
+    StoreShippingWebhookSerializer,
 )
 from .shipping import ShippingProviderError, create_shipment_for_sale, is_valid_shipping_webhook_signature
 from .wompi import WompiError, amount_to_cents, build_checkout_url, extract_event_signature_payload, get_transaction
@@ -1792,3 +1793,544 @@ class StoreOpsManualShipmentView(APIView):
             shipment=_serialize_latest_shipment(sale),
             order=_serialize_store_order(sale),
         )
+
+
+@extend_schema(tags=["Store"])
+class StoreShippingWebhookView(APIView):
+    """
+    Webhook para recibir actualizaciones de envío de MiPaquete y otros proveedores.
+    """
+    permission_classes = []  # No requiere autenticación para webhooks
+    authentication_classes = []  # No requiere autenticación
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Procesar webhook de actualización de envío.
+        """
+        # Validar firma HMAC si está configurada
+        signature = request.headers.get('X-Signature') or request.headers.get('X-Hub-Signature-256')
+        raw_body = request.body.decode('utf-8')
+
+        webhook_secret = str(getattr(settings, "STORE_SHIPPING_WEBHOOK_SECRET", "")).strip()
+        if webhook_secret and signature:
+            if not is_valid_shipping_webhook_signature(request.data, signature, webhook_secret):
+                logger.warning("Webhook signature validation failed")
+                return error_response(
+                    detail="Firma del webhook inválida",
+                    code="STORE_SHIPPING_WEBHOOK_INVALID_SIGNATURE",
+                    http_status=status.HTTP_401_UNAUTHORIZED,
+                )
+
+        # Serializar y validar payload
+        serializer = StoreShippingWebhookSerializer(data=request.data)
+        if not serializer.is_valid():
+            logger.warning("Invalid webhook payload: %s", serializer.errors)
+            return error_response(
+                detail="Payload del webhook inválido",
+                code="STORE_SHIPPING_WEBHOOK_INVALID_PAYLOAD",
+                http_status=status.HTTP_400_BAD_REQUEST,
+                errors=[str(serializer.errors)],
+            )
+
+        data = serializer.validated_data
+        tracking_number = data['tracking_number']
+        new_status = data['status']
+        event_type = data.get('event', 'status_update')
+
+        # Buscar el shipment por tracking_number
+        shipment = Shipment.objects.select_for_update().filter(tracking_number=tracking_number).first()
+        if not shipment:
+            logger.warning("Shipment not found for tracking_number: %s", tracking_number)
+            return error_response(
+                detail=f"No se encontró envío con tracking_number: {tracking_number}",
+                code="STORE_SHIPPING_WEBHOOK_SHIPMENT_NOT_FOUND",
+                http_status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Verificar si el evento ya fue procesado
+        provider_event_id = f"{event_type}_{tracking_number}_{data.get('timestamp', timezone.now().isoformat())}"
+        if ShipmentEvent.objects.filter(provider_event_id=provider_event_id).exists():
+            return success_response(
+                detail="Evento ya procesado",
+                code="STORE_SHIPPING_WEBHOOK_DUPLICATE_EVENT",
+            )
+
+        # Guardar el evento del webhook
+        event = ShipmentEvent.objects.create(
+            shipment=shipment,
+            provider_event_id=provider_event_id,
+            event_type=event_type,
+            payload=request.data,
+            occurred_at=data.get('timestamp'),
+        )
+
+        # Actualizar el shipment si hay cambios
+        shipment_updated = False
+        shipment_fields = []
+
+        if shipment.status != new_status:
+            shipment.status = new_status
+            shipment_fields.append('status')
+            shipment_updated = True
+
+        # Actualizar campos opcionales si vienen en el payload
+        if data.get('carrier') and shipment.carrier != data['carrier']:
+            shipment.carrier = data['carrier']
+            shipment_fields.append('carrier')
+            shipment_updated = True
+
+        if data.get('provider_reference') and shipment.provider_reference != data['provider_reference']:
+            shipment.provider_reference = data['provider_reference']
+            shipment_fields.append('provider_reference')
+            shipment_updated = True
+
+        if data.get('label_url') and shipment.label_url != data['label_url']:
+            shipment.label_url = data['label_url']
+            shipment_fields.append('label_url')
+            shipment_updated = True
+
+        if data.get('shipping_cost') is not None and shipment.shipping_cost != data['shipping_cost']:
+            shipment.shipping_cost = data['shipping_cost']
+            shipment_fields.append('shipping_cost')
+            shipment_updated = True
+
+        if data.get('currency') and shipment.currency != data['currency']:
+            shipment.currency = data['currency']
+            shipment_fields.append('currency')
+            shipment_updated = True
+
+        # Actualizar metadata con información adicional
+        metadata_update = {}
+        if data.get('location'):
+            metadata_update['last_location'] = data['location']
+        if data.get('description'):
+            metadata_update['last_description'] = data['description']
+
+        if metadata_update:
+            current_metadata = shipment.metadata or {}
+            current_metadata.update(metadata_update)
+            shipment.metadata = current_metadata
+            shipment_fields.append('metadata')
+            shipment_updated = True
+
+        if shipment_updated:
+            shipment.save(update_fields=shipment_fields + ['updated_at'])
+
+        # Actualizar el estado de la orden si corresponde
+        sale = shipment.sale
+        sale_updated = False
+        sale_fields = ['updated_at']
+
+        now = timezone.now()
+
+        if new_status in {Shipment.ShipmentStatus.IN_TRANSIT, Shipment.ShipmentStatus.DELIVERED}:
+            if sale.status in {"paid", "processing"}:
+                sale.status = "shipped"
+                sale_fields.append("status")
+                sale_updated = True
+            if not sale.shipped_at:
+                sale.shipped_at = now
+                sale_fields.append("shipped_at")
+                sale_updated = True
+
+        if new_status == Shipment.ShipmentStatus.DELIVERED:
+            if sale.status in {"paid", "processing", "shipped"}:
+                sale.status = "delivered"
+                sale_fields.append("status")
+                sale_updated = True
+            if not sale.delivered_at:
+                sale.delivered_at = now
+                sale_fields.append("delivered_at")
+                sale_updated = True
+
+        if new_status == Shipment.ShipmentStatus.DELIVERED and sale.status == "delivered":
+            if not sale.confirmed_at:
+                sale.confirmed_at = now
+                sale_fields.append("confirmed_at")
+                sale_updated = True
+            sale.status = "completed"
+            sale_fields.append("status")
+            sale_updated = True
+
+        if sale_updated:
+            sale.save(update_fields=sale_fields)
+
+        # Crear audit log
+        AuditLog.objects.create(
+            action="store_shipping_webhook_processed",
+            entity="shipment",
+            entity_id=shipment.id,
+            performed_by="webhook",
+            extra_data={
+                "event_type": event_type,
+                "tracking_number": tracking_number,
+                "old_status": shipment.status if not shipment_updated else None,
+                "new_status": new_status,
+                "sale_id": sale.id,
+                "sale_status_updated": sale_updated,
+            },
+        )
+
+        logger.info(
+            "Webhook processed for shipment %s: %s -> %s",
+            tracking_number, shipment.status, new_status
+        )
+
+        return success_response(
+            detail="Webhook procesado correctamente",
+            code="STORE_SHIPPING_WEBHOOK_PROCESSED",
+            shipment={
+                "id": shipment.id,
+                "tracking_number": shipment.tracking_number,
+                "status": shipment.status,
+                "carrier": shipment.carrier,
+            },
+            event={
+                "id": event.id,
+                "type": event.event_type,
+                "occurred_at": event.occurred_at.isoformat() if event.occurred_at else None,
+            },
+        )
+
+
+@extend_schema(tags=["Store"])
+class StoreShippingQuoteView(APIView):
+    """
+    Obtiene cotización de envío desde MiPaquete para un destino específico.
+    """
+    permission_classes = []  # Permite acceso sin autenticación para cotizaciones
+
+    def post(self, request):
+        """
+        Obtener cotización de envío.
+        """
+        destination = request.data.get("destination", {})
+        weight_grams = request.data.get("weight_grams", 0)
+
+        if not destination or not destination.get("city") or not destination.get("department"):
+            return error_response(
+                detail="Destino requerido (city y department)",
+                code="STORE_SHIPPING_QUOTE_INVALID_DESTINATION",
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not weight_grams or weight_grams <= 0:
+            return error_response(
+                detail="Peso estimado requerido (weight_grams > 0)",
+                code="STORE_SHIPPING_QUOTE_INVALID_WEIGHT",
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            quote_data = self._get_mipaquete_quote(destination, weight_grams)
+        except Exception as exc:
+            logger.error("Error obteniendo cotización de MiPaquete: %s", exc)
+            # Fallback a estimación local si falla la API
+            quote_data = self._get_fallback_quote(destination, weight_grams)
+
+        return success_response(
+            detail="Cotización obtenida correctamente",
+            code="STORE_SHIPPING_QUOTE_OK",
+            destination=destination,
+            weight_grams=weight_grams,
+            services=quote_data,
+        )
+
+    def _get_mipaquete_quote(self, destination, weight_grams):
+        """
+        Consultar API de MiPaquete para obtener costos reales.
+        """
+        base_url = str(getattr(settings, "STORE_SHIPPING_QUOTE_API_URL", "")).strip().rstrip("/")
+        if not base_url:
+            raise Exception("STORE_SHIPPING_QUOTE_API_URL no configurado")
+
+        origin_city = str(getattr(settings, "STORE_SHIPPING_ORIGIN_CITY", "Bogotá")).strip()
+        origin_department = str(getattr(settings, "STORE_SHIPPING_ORIGIN_DEPARTMENT", "Cundinamarca")).strip()
+
+        payload = {
+            "origin": {
+                "city": origin_city,
+                "department": origin_department,
+            },
+            "destination": {
+                "city": destination["city"],
+                "department": destination["department"],
+            },
+            "package": {
+                "weight": weight_grams / 1000,  # Convertir a kg
+                "dimensions": {
+                    "length": 30,
+                    "width": 20,
+                    "height": 10,
+                }
+            }
+        }
+
+        response = _http_json(
+            base_url,
+            method="POST",
+            payload=payload,
+            headers=self._get_auth_headers(),
+        )
+
+        # Procesar respuesta de MiPaquete
+        services = []
+        if isinstance(response, dict) and "services" in response:
+            for service_data in response["services"]:
+                services.append({
+                    "name": service_data.get("name", "estándar"),
+                    "cost": str(service_data.get("cost", 0)),
+                    "eta_hours": service_data.get("eta_hours", 48),
+                    "available": service_data.get("available", True),
+                    "currency": service_data.get("currency", "COP"),
+                })
+
+        return services
+
+    def _get_fallback_quote(self, destination, weight_grams):
+        """
+        Fallback a estimación local cuando falla la API de MiPaquete.
+        """
+        # Usar lógica existente de estimación
+        zone = self._get_shipping_zone(destination)
+        estimated_cost = _estimate_shipping_cost(zone, weight_grams)
+
+        return [
+            {
+                "name": "estándar",
+                "cost": str(estimated_cost),
+                "eta_hours": 48,
+                "available": True,
+                "currency": "COP",
+                "note": "Estimación (API no disponible)",
+            }
+        ]
+
+    def _get_shipping_zone(self, destination):
+        """
+        Determinar zona de envío basada en el departamento.
+        """
+        department = destination.get("department", "").lower()
+
+        # Definir zonas por departamento
+        local_departments = ["cundinamarca"]
+        regional_departments = ["antioquia", "valle del cauca", "atlantico", "bolivar", "santander"]
+
+        if department in local_departments:
+            return "local"
+        elif department in regional_departments:
+            return "regional"
+        else:
+            return "national"
+
+    def _get_auth_headers(self):
+        """
+        Obtener headers de autenticación para MiPaquete API.
+        """
+        headers = {"Content-Type": "application/json"}
+
+        auth_header = str(getattr(settings, "STORE_SHIPPING_AUTH_HEADER", "Authorization")).strip()
+        auth_prefix = str(getattr(settings, "STORE_SHIPPING_AUTH_PREFIX", "Bearer")).strip()
+        api_key = str(getattr(settings, "STORE_SHIPPING_API_KEY", "")).strip()
+
+        if api_key:
+            headers[auth_header] = f"{auth_prefix} {api_key}"
+
+        return headers
+
+
+@extend_schema(tags=["Store"])
+class StoreLocationsDepartmentsView(APIView):
+    """
+    Obtiene lista de departamentos de Colombia.
+    """
+    permission_classes = []
+
+    def get(self, request):
+        """
+        Lista de departamentos disponibles para envío.
+        """
+        departments = [
+            {"code": "amazonas", "name": "Amazonas"},
+            {"code": "antioquia", "name": "Antioquia"},
+            {"code": "arauca", "name": "Arauca"},
+            {"code": "atlantico", "name": "Atlántico"},
+            {"code": "bolivar", "name": "Bolívar"},
+            {"code": "boyaca", "name": "Boyacá"},
+            {"code": "caldas", "name": "Caldas"},
+            {"code": "caqueta", "name": "Caquetá"},
+            {"code": "casanare", "name": "Casanare"},
+            {"code": "cauca", "name": "Cauca"},
+            {"code": "cesar", "name": "Cesar"},
+            {"code": "choco", "name": "Chocó"},
+            {"code": "cordoba", "name": "Córdoba"},
+            {"code": "cundinamarca", "name": "Cundinamarca"},
+            {"code": "guainia", "name": "Guainía"},
+            {"code": "guaviare", "name": "Guaviare"},
+            {"code": "huila", "name": "Huila"},
+            {"code": "la_guajira", "name": "La Guajira"},
+            {"code": "magdalena", "name": "Magdalena"},
+            {"code": "meta", "name": "Meta"},
+            {"code": "narino", "name": "Nariño"},
+            {"code": "norte_de_santander", "name": "Norte de Santander"},
+            {"code": "putumayo", "name": "Putumayo"},
+            {"code": "quindio", "name": "Quindío"},
+            {"code": "risaralda", "name": "Risaralda"},
+            {"code": "san_andres", "name": "San Andrés y Providencia"},
+            {"code": "santander", "name": "Santander"},
+            {"code": "sucre", "name": "Sucre"},
+            {"code": "tolima", "name": "Tolima"},
+            {"code": "valle_del_cauca", "name": "Valle del Cauca"},
+            {"code": "vaupes", "name": "Vaupés"},
+            {"code": "vichada", "name": "Vichada"},
+        ]
+
+        return success_response(
+            detail="Departamentos obtenidos correctamente",
+            code="STORE_LOCATIONS_DEPARTMENTS_OK",
+            departments=departments,
+        )
+
+
+@extend_schema(tags=["Store"])
+class StoreLocationsCitiesView(APIView):
+    """
+    Obtiene lista de ciudades de un departamento específico.
+    """
+    permission_classes = []
+
+    def get(self, request, department_code: str):
+        """
+        Lista de ciudades disponibles para envío en un departamento.
+        """
+        cities = self._get_cities_for_department(department_code)
+
+        if not cities:
+            return error_response(
+                detail=f"No se encontraron ciudades para el departamento: {department_code}",
+                code="STORE_LOCATIONS_CITIES_NOT_FOUND",
+                http_status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return success_response(
+            detail="Ciudades obtenidas correctamente",
+            code="STORE_LOCATIONS_CITIES_OK",
+            department_code=department_code,
+            cities=cities,
+        )
+
+    def _get_cities_for_department(self, department_code: str):
+        """
+        Obtener ciudades por departamento.
+        Nota: En producción, esto debería venir de una base de datos o API externa.
+        """
+        cities_by_department = {
+            "cundinamarca": [
+                {"code": "bogota", "name": "Bogotá D.C."},
+                {"code": "soacha", "name": "Soacha"},
+                {"code": "zipaquira", "name": "Zipaquirá"},
+                {"code": "chia", "name": "Chía"},
+                {"code": "cajica", "name": "Cajicá"},
+                {"code": "mosquera", "name": "Mosquera"},
+                {"code": "facaatativa", "name": "Facatativá"},
+                {"code": "girardot", "name": "Girardot"},
+            ],
+            "antioquia": [
+                {"code": "medellin", "name": "Medellín"},
+                {"code": "bello", "name": "Bello"},
+                {"code": "itagui", "name": "Itagüí"},
+                {"code": "envigado", "name": "Envigado"},
+                {"code": "apartado", "name": "Apartadó"},
+                {"code": "rionegro", "name": "Rionegro"},
+                {"code": "turbo", "name": "Turbo"},
+            ],
+            "valle_del_cauca": [
+                {"code": "cali", "name": "Cali"},
+                {"code": "palmira", "name": "Palmira"},
+                {"code": "tulua", "name": "Tuluá"},
+                {"code": "buga", "name": "Buga"},
+                {"code": "cartago", "name": "Cartago"},
+                {"code": "jamundi", "name": "Jamundí"},
+            ],
+            "atlantico": [
+                {"code": "barranquilla", "name": "Barranquilla"},
+                {"code": "soledad", "name": "Soledad"},
+                {"code": "malambo", "name": "Malambo"},
+                {"code": "puerto_colombia", "name": "Puerto Colombia"},
+                {"code": "sabanagrande", "name": "Sabanagrande"},
+            ],
+            # Agregar más departamentos según necesidad
+        }
+
+        return cities_by_department.get(department_code.lower(), [])
+
+
+@extend_schema(tags=["Store"])
+class StorePickupPointsView(APIView):
+    """
+    Obtiene puntos de recogida disponibles para una ubicación.
+    """
+    permission_classes = []
+
+    def get(self, request):
+        """
+        Lista de puntos de recogida cercanos.
+        """
+        city = request.query_params.get("city", "").strip()
+        department = request.query_params.get("department", "").strip()
+
+        if not city or not department:
+            return error_response(
+                detail="Ciudad y departamento requeridos",
+                code="STORE_PICKUP_POINTS_INVALID_LOCATION",
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            points = self._get_pickup_points(city, department)
+        except Exception as exc:
+            logger.error("Error obteniendo puntos de recogida: %s", exc)
+            points = self._get_mock_pickup_points(city, department)
+
+        return success_response(
+            detail="Puntos de recogida obtenidos correctamente",
+            code="STORE_PICKUP_POINTS_OK",
+            location={"city": city, "department": department},
+            points=points,
+        )
+
+    def _get_pickup_points(self, city: str, department: str):
+        """
+        Consultar puntos de recogida desde API de MiPaquete.
+        """
+        # Implementar consulta a API de MiPaquete
+        # Por ahora retorna datos mock
+        return self._get_mock_pickup_points(city, department)
+
+    def _get_mock_pickup_points(self, city: str, department: str):
+        """
+        Puntos de recogida mock para desarrollo.
+        """
+        mock_points = [
+            {
+                "id": "mp001",
+                "name": "Punto MiPaquete Centro",
+                "address": f"Calle 1 # 2-3, {city.title()}",
+                "schedule": "Lunes a Viernes 8:00-18:00, Sábados 8:00-12:00",
+                "phone": "+57 300 123 4567",
+                "coordinates": {"lat": 4.6097, "lng": -74.0817},
+                "services": ["recogida", "entrega"],
+            },
+            {
+                "id": "mp002",
+                "name": "Punto MiPaquete Norte",
+                "address": f"Avenida Principal # 45-67, {city.title()}",
+                "schedule": "Lunes a Viernes 9:00-17:00",
+                "phone": "+57 300 987 6543",
+                "coordinates": {"lat": 4.6297, "lng": -74.0917},
+                "services": ["recogida"],
+            },
+        ]
+
+        return mock_points

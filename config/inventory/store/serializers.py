@@ -326,3 +326,57 @@ class StoreOpsManualShipmentSerializer(serializers.Serializer):
         if not normalized:
             raise serializers.ValidationError("carrier es requerido.")
         return normalized
+
+
+class StoreShippingWebhookSerializer(serializers.Serializer):
+    """
+    Serializador para webhook de MiPaquete y otros proveedores de envío.
+    """
+
+    # Campos requeridos por MiPaquete
+    event = serializers.CharField(max_length=100)
+    tracking_number = serializers.CharField(max_length=80)
+    status = serializers.CharField(max_length=50)
+    timestamp = serializers.DateTimeField(required=False, allow_null=True)
+
+    # Campos opcionales
+    carrier = serializers.CharField(max_length=60, required=False, allow_blank=True)
+    location = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    description = serializers.CharField(max_length=500, required=False, allow_blank=True)
+
+    # Campos adicionales del payload
+    provider_reference = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    label_url = serializers.URLField(required=False, allow_blank=True)
+    shipping_cost = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    currency = serializers.CharField(max_length=10, required=False, allow_blank=True)
+
+    # Campos de seguridad
+    signature = serializers.CharField(max_length=200, required=False, allow_blank=True)
+
+    def validate_tracking_number(self, value: str) -> str:
+        normalized = value.strip().upper()
+        if not normalized:
+            raise serializers.ValidationError("tracking_number es requerido.")
+        return normalized
+
+    def validate_status(self, value: str) -> str:
+        """
+        Normalizar el status del proveedor al formato interno.
+        """
+        status_map = {
+            'created': 'created',
+            'pending': 'created',
+            'in_transit': 'in_transit',
+            'picked_up': 'in_transit',
+            'out_for_delivery': 'in_transit',
+            'delivered': 'delivered',
+            'delivered_to_recipient': 'delivered',
+            'failed': 'failed',
+            'exception': 'failed',
+            'returned': 'failed',
+            'canceled': 'canceled',
+            'cancelled': 'canceled',
+        }
+        normalized = value.strip().lower()
+        mapped_status = status_map.get(normalized, 'created')
+        return mapped_status
