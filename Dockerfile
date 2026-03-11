@@ -28,4 +28,4 @@ COPY . .
 RUN python config/manage.py collectstatic --noinput --settings=config.settings_production
 
 # Comando final optimizado
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--pythonpath", "config", "config.wsgi:application"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--pythonpath", "config", "config.wsgi:application"]
