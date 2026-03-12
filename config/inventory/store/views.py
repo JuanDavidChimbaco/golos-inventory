@@ -982,6 +982,7 @@ class StoreCheckoutView(APIView):
             shipping_address=shipping_address,
             is_order=validated.get("is_order", True),
             total=total,
+            commercial_metadata=commercial,
             status="pending",
             payment_status="unpaid",
             payment_reference=f"ORD-{uuid4().hex[:12].upper()}",

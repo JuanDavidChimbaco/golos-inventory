@@ -286,6 +286,11 @@ class Sale(models.Model):
     shipping_address = models.JSONField(blank=True, null=True)
     is_order = models.BooleanField(default=False)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    commercial_metadata = models.JSONField(
+        blank=True, 
+        null=True, 
+        help_text="Datos comerciales internos (costos de envío proyectado, fees de pasarelas, márgenes) calculados al checkout."
+    )
     active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 
