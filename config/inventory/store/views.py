@@ -2149,9 +2149,84 @@ class StoreLocationsDepartmentsView(APIView):
 
     def get(self, request):
         """
-        Lista de departamentos disponibles para envío.
+        Lista de departamentos disponibles para envío usando MiPaquete.
         """
-        departments = [
+        try:
+            departments = self._get_mipaquete_departments()
+        except Exception as exc:
+            logger.error("Error obteniendo departamentos de MiPaquete: %s", exc)
+            departments = self._get_fallback_departments()
+
+        return success_response(
+            detail="Departamentos obtenidos correctamente",
+            code="STORE_LOCATIONS_DEPARTMENTS_OK",
+            departments=departments,
+        )
+
+    def _get_mipaquete_departments(self):
+        """
+        Consulta la API de MiPaquete para listar departamentos.
+        """
+        from .shipping import _http_json
+        
+        base_url = str(getattr(settings, "STORE_SHIPPING_API_BASE_URL", "https://api.mipaquete.com")).strip().rstrip("/")
+        if not base_url:
+            raise Exception("STORE_SHIPPING_API_BASE_URL no configurado")
+
+        # El endpoint de MiPaquete para obtener ubicaciones
+        endpoint = f"{base_url}/v2/locations/departments"
+        
+        # Obtenemos los headers configurados anteriormente en views
+        headers = {"Content-Type": "application/json"}
+        auth_header = str(getattr(settings, "STORE_SHIPPING_AUTH_HEADER", "apikey")).strip()
+        auth_prefix = str(getattr(settings, "STORE_SHIPPING_AUTH_PREFIX", "")).strip()
+        api_key = str(getattr(settings, "STORE_SHIPPING_API_KEY", "")).strip()
+        
+        if api_key:
+            if auth_prefix:
+                headers[auth_header] = f"{auth_prefix} {api_key}"
+            else:
+                headers[auth_header] = api_key
+                
+        # Asegurar token JWT si requiere Authorization por defecto en MiPaquete web interface (A veces api_key se asume asi)
+        if "apikey" not in headers and "Authorization" not in headers:
+            headers["apikey"] = api_key
+
+        response = _http_json(endpoint, method="GET", headers=headers)
+        
+        departments = []
+        # Parseo flexible según la respuesta de MiPaquete
+        if isinstance(response, list):
+            items = response
+        elif isinstance(response, dict) and "data" in response:
+            items = response["data"]
+        else:
+            items = []
+            
+        for item in items:
+            name = item.get("departmentName") or item.get("name")
+            code = item.get("departmentCode") or item.get("_id") or item.get("code") or name
+            if code and name:
+                departments.append({"code": str(code), "name": str(name).title()})
+                
+        if not departments:
+            raise Exception("No se obtuvieron departamentos válidos")
+            
+        # Eliminar duplicados si los hay y ordenar
+        seen = set()
+        unique_departments = []
+        for d in departments:
+            if d["code"] not in seen:
+                seen.add(d["code"])
+                unique_departments.append(d)
+                
+        return sorted(unique_departments, key=lambda x: x["name"])
+
+    def _get_fallback_departments(self):
+        """
+        Fallback a la lista local si falla la API.
+        """
+        return sorted([
             {"code": "amazonas", "name": "Amazonas"},
             {"code": "antioquia", "name": "Antioquia"},
             {"code": "arauca", "name": "Arauca"},
@@ -2184,13 +2259,7 @@ class StoreLocationsDepartmentsView(APIView):
             {"code": "valle_del_cauca", "name": "Valle del Cauca"},
             {"code": "vaupes", "name": "Vaupés"},
             {"code": "vichada", "name": "Vichada"},
-        ]
-
-        return success_response(
-            detail="Departamentos obtenidos correctamente",
-            code="STORE_LOCATIONS_DEPARTMENTS_OK",
-            departments=departments,
-        )
+        ], key=lambda x: x["name"])
 
 
 @extend_schema(tags=["Store"])
@@ -2202,9 +2271,13 @@ class StoreLocationsCitiesView(APIView):
 
     def get(self, request, department_code: str):
         """
-        Lista de ciudades disponibles para envío en un departamento.
+        Lista de ciudades disponibles para envío en un departamento usando MiPaquete.
         """
-        cities = self._get_cities_for_department(department_code)
+        try:
+            cities = self._get_mipaquete_cities(department_code)
+        except Exception as exc:
+            logger.error("Error obteniendo ciudades de MiPaquete para %s: %s", department_code, exc)
+            cities = self._get_fallback_cities(department_code)
 
         if not cities:
             return error_response(
@@ -2220,10 +2293,70 @@ class StoreLocationsCitiesView(APIView):
             cities=cities,
         )
 
-    def _get_cities_for_department(self, department_code: str):
+    def _get_mipaquete_cities(self, department_code: str):
         """
-        Obtener ciudades por departamento.
-        Nota: En producción, esto debería venir de una base de datos o API externa.
+        Consulta la API de MiPaquete para listar ciudades de un departamento.
+        """
+        from .shipping import _http_json
+        
+        base_url = str(getattr(settings, "STORE_SHIPPING_API_BASE_URL", "https://api.mipaquete.com")).strip().rstrip("/")
+        if not base_url:
+            raise Exception("STORE_SHIPPING_API_BASE_URL no configurado")
+
+        # Necesitamos el código DANE del departamento para buscar sus ciudades.
+        # Primero obtenemos todos los departamentos para buscar el código si no lo tenemos exacto.
+        departments = StoreLocationsDepartmentsView()._get_mipaquete_departments()
+        target_dep = next((d for d in departments if d["code"].lower() == department_code.lower() or d["name"].lower() == department_code.replace("_", " ").lower()), None)
+        
+        real_dep_code = target_dep["code"] if target_dep else department_code
+
+        endpoint = f"{base_url}/v2/locations/cities/{real_dep_code}"
+        
+        headers = {"Content-Type": "application/json"}
+        auth_header = str(getattr(settings, "STORE_SHIPPING_AUTH_HEADER", "apikey")).strip()
+        auth_prefix = str(getattr(settings, "STORE_SHIPPING_AUTH_PREFIX", "")).strip()
+        api_key = str(getattr(settings, "STORE_SHIPPING_API_KEY", "")).strip()
+        
+        if api_key:
+            if auth_prefix:
+                headers[auth_header] = f"{auth_prefix} {api_key}"
+            else:
+                headers[auth_header] = api_key
+                
+        if "apikey" not in headers and "Authorization" not in headers:
+            headers["apikey"] = api_key
+
+        response = _http_json(endpoint, method="GET", headers=headers)
+        
+        cities = []
+        if isinstance(response, list):
+            items = response
+        elif isinstance(response, dict) and "data" in response:
+            items = response["data"]
+        else:
+            items = []
+            
+        for item in items:
+            name = item.get("cityName") or item.get("name")
+            code = item.get("cityCode") or item.get("_id") or item.get("code") or name
+            if code and name:
+                cities.append({"code": str(code), "name": str(name).title()})
+                
+        if not cities:
+            raise Exception(f"No se obtuvieron ciudades válidas para el departamento {real_dep_code}")
+            
+        seen = set()
+        unique_cities = []
+        for c in cities:
+            if c["code"] not in seen:
+                seen.add(c["code"])
+                unique_cities.append(c)
+                
+        return sorted(unique_cities, key=lambda x: x["name"])
+
+    def _get_fallback_cities(self, department_code: str):
+        """
+        Fallback a la lista local de ciudades si falla la API.
         """
         cities_by_department = {
             "amazonas": [{"code": "leticia", "name": "Leticia"}],
