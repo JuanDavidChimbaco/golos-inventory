@@ -2226,6 +2226,33 @@ class StoreLocationsCitiesView(APIView):
         Nota: En producción, esto debería venir de una base de datos o API externa.
         """
         cities_by_department = {
+            "amazonas": [{"code": "leticia", "name": "Leticia"}],
+            "antioquia": [
+                {"code": "medellin", "name": "Medellín"},
+                {"code": "bello", "name": "Bello"},
+                {"code": "itagui", "name": "Itagüí"},
+                {"code": "envigado", "name": "Envigado"},
+                {"code": "apartado", "name": "Apartadó"},
+                {"code": "rionegro", "name": "Rionegro"},
+                {"code": "turbo", "name": "Turbo"},
+            ],
+            "arauca": [{"code": "arauca", "name": "Arauca"}],
+            "atlantico": [
+                {"code": "barranquilla", "name": "Barranquilla"},
+                {"code": "soledad", "name": "Soledad"},
+                {"code": "malambo", "name": "Malambo"},
+                {"code": "puerto_colombia", "name": "Puerto Colombia"},
+                {"code": "sabanagrande", "name": "Sabanagrande"},
+            ],
+            "bolivar": [{"code": "cartagena", "name": "Cartagena"}, {"code": "magangue", "name": "Magangué"}],
+            "boyaca": [{"code": "tunja", "name": "Tunja"}, {"code": "duitama", "name": "Duitama"}, {"code": "sogamoso", "name": "Sogamoso"}],
+            "caldas": [{"code": "manizales", "name": "Manizales"}, {"code": "la_dorada", "name": "La Dorada"}],
+            "caqueta": [{"code": "florencia", "name": "Florencia"}],
+            "casanare": [{"code": "yopal", "name": "Yopal"}],
+            "cauca": [{"code": "popayan", "name": "Popayán"}],
+            "cesar": [{"code": "valledupar", "name": "Valledupar"}],
+            "choco": [{"code": "quibdo", "name": "Quibdó"}],
+            "cordoba": [{"code": "monteria", "name": "Montería"}, {"code": "lorica", "name": "Lorica"}],
             "cundinamarca": [
                 {"code": "bogota", "name": "Bogotá D.C."},
                 {"code": "soacha", "name": "Soacha"},
@@ -2236,15 +2263,21 @@ class StoreLocationsCitiesView(APIView):
                 {"code": "facaatativa", "name": "Facatativá"},
                 {"code": "girardot", "name": "Girardot"},
             ],
-            "antioquia": [
-                {"code": "medellin", "name": "Medellín"},
-                {"code": "bello", "name": "Bello"},
-                {"code": "itagui", "name": "Itagüí"},
-                {"code": "envigado", "name": "Envigado"},
-                {"code": "apartado", "name": "Apartadó"},
-                {"code": "rionegro", "name": "Rionegro"},
-                {"code": "turbo", "name": "Turbo"},
-            ],
+            "guainia": [{"code": "inirida", "name": "Inírida"}],
+            "guaviare": [{"code": "san_jose_del_guaviare", "name": "San José del Guaviare"}],
+            "huila": [{"code": "neiva", "name": "Neiva"}, {"code": "pitalito", "name": "Pitalito"}],
+            "la_guajira": [{"code": "riohacha", "name": "Riohacha"}, {"code": "maicao", "name": "Maicao"}],
+            "magdalena": [{"code": "santa_marta", "name": "Santa Marta"}, {"code": "cienaga", "name": "Ciénaga"}],
+            "meta": [{"code": "villavicencio", "name": "Villavicencio"}, {"code": "acacias", "name": "Acacías"}],
+            "narino": [{"code": "pasto", "name": "Pasto"}, {"code": "ipiales", "name": "Ipiales"}, {"code": "tumaco", "name": "Tumaco"}],
+            "norte_de_santander": [{"code": "cucuta", "name": "Cúcuta"}, {"code": "ocana", "name": "Ocaña"}],
+            "putumayo": [{"code": "mocoa", "name": "Mocoa"}, {"code": "puerto_asis", "name": "Puerto Asís"}],
+            "quindio": [{"code": "armenia", "name": "Armenia"}, {"code": "calarca", "name": "Calarcá"}],
+            "risaralda": [{"code": "pereira", "name": "Pereira"}, {"code": "dosquebradas", "name": "Dosquebradas"}],
+            "san_andres": [{"code": "san_andres", "name": "San Andrés"}],
+            "santander": [{"code": "bucaramanga", "name": "Bucaramanga"}, {"code": "floridablanca", "name": "Floridablanca"}, {"code": "barrancabermeja", "name": "Barrancabermeja"}],
+            "sucre": [{"code": "sincelejo", "name": "Sincelejo"}, {"code": "corozal", "name": "Corozal"}],
+            "tolima": [{"code": "ibague", "name": "Ibagué"}, {"code": "espinal", "name": "Espinal"}],
             "valle_del_cauca": [
                 {"code": "cali", "name": "Cali"},
                 {"code": "palmira", "name": "Palmira"},
@@ -2253,14 +2286,8 @@ class StoreLocationsCitiesView(APIView):
                 {"code": "cartago", "name": "Cartago"},
                 {"code": "jamundi", "name": "Jamundí"},
             ],
-            "atlantico": [
-                {"code": "barranquilla", "name": "Barranquilla"},
-                {"code": "soledad", "name": "Soledad"},
-                {"code": "malambo", "name": "Malambo"},
-                {"code": "puerto_colombia", "name": "Puerto Colombia"},
-                {"code": "sabanagrande", "name": "Sabanagrande"},
-            ],
-            # Agregar más departamentos según necesidad
+            "vaupes": [{"code": "mitu", "name": "Mitú"}],
+            "vichada": [{"code": "puerto_carreno", "name": "Puerto Carreño"}],
         }
 
         return cities_by_department.get(department_code.lower(), [])
