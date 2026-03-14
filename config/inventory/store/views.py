@@ -1,5 +1,5 @@
 """
-Views publicas para la tienda en linea.
+Views publicas para la tienda en linea. (v2.1 - MiPaquete Integration)
 """
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from decimal import Decimal
 import hashlib
 import logging
 from uuid import uuid4
+import os
 
 from django.conf import settings
 from django.contrib.auth.models import Group, User
@@ -17,6 +18,7 @@ from django.db.models import Exists, OuterRef, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
+from dotenv import load_dotenv # Added this import
 from rest_framework import permissions, status
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -135,13 +137,56 @@ def _parse_shipping_cost_matrix(raw_value: str) -> list[tuple[str, int, Decimal]
     return sorted(rows, key=lambda row: (row[0], row[1]))
 
 
-def _estimate_shipping_cost(shipping_zone: str, estimated_weight_grams: int) -> Decimal:
-    """ 
-    Estima el costo de envío basado en la zona y el peso estimado.
+def _get_location_zone(department_code: str, city_code: str) -> str:
     """
-    matrix = _parse_shipping_cost_matrix(getattr(settings, "STORE_MARGIN_SHIPPING_COST_MATRIX", ""))
-    normalized_zone = shipping_zone if shipping_zone in {"local", "regional", "national"} else "regional"
-    normalized_weight = max(int(estimated_weight_grams), 1)
+    Determina la zona de envío (local, regional, national) según el departamento y ciudad.
+    Huila: 41
+    Tolima: 73
+    Caquetá: 18
+    """
+    dep_code = str(department_code)
+    # Local: Huila (Neiva 41001, Palermo 41518)
+    if dep_code == "41":
+        # Extraer primeros 5 dígitos para comparación local
+        clean_city = str(city_code)[:5]
+        if clean_city in {"41001", "41524"}:
+             return "local"
+        return "regional"
+    
+    # Regional: Tolima, Caquetá
+    if dep_code in {"73", "18"}:
+        return "regional"
+    
+    # Especial: Amazonas, San Andrés, etc. (Podríamos mapearlo a national o una zona más cara si existe)
+    if dep_code in {"91", "88", "94", "95", "97", "99"}:
+        return "national" # O "special" si la matriz lo soporta
+        
+    return "national"
+
+
+def _estimate_shipping_cost(
+    estimated_weight_grams: int,
+    *,
+    shipping_zone: str | None = None,
+    department_code: str | None = None,
+    city_code: str | None = None,
+) -> Decimal:
+    """ 
+    Estima el costo de envío basado en zona, departamento/ciudad o un fallback.
+    """
+    if department_code and city_code:
+        zone_to_use = _get_location_zone(department_code, city_code)
+    else:
+        zone_to_use = shipping_zone or "regional"
+
+    # Forzar recarga de .env para asegurar valores actualizados sin reiniciar servidor
+    env_path = os.path.join(settings.BASE_DIR, '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path, override=True)
+
+    matrix = _parse_shipping_cost_matrix(os.getenv("STORE_MARGIN_SHIPPING_COST_MATRIX", ""))
+    normalized_zone = zone_to_use if zone_to_use in {"local", "regional", "national"} else "regional"
+    normalized_weight = max(int(estimated_weight_grams or 0), 1)
     for zone, max_weight, cost in matrix:
         if zone == normalized_zone and normalized_weight <= max_weight:
             return cost
@@ -151,8 +196,10 @@ def _estimate_shipping_cost(shipping_zone: str, estimated_weight_grams: int) -> 
 def _build_commercial_summary(
     normalized_items: list[dict],
     *,
-    shipping_zone: str,
-    estimated_weight_grams: int | None,
+    shipping_zone: str = "regional",
+    estimated_weight_grams: int | None = None,
+    department_code: str | None = None,
+    city_code: str | None = None,
 ) -> dict:
     """
     Construye un resumen comercial basado en los items normalizados.
@@ -176,7 +223,12 @@ def _build_commercial_summary(
 
     wompi_fee_before_vat = (gross_total * wompi_rate_percent / Decimal("100")) + wompi_fixed_fee
     wompi_fee_total = wompi_fee_before_vat * (Decimal("1") + (wompi_vat_percent / Decimal("100")))
-    shipping_estimate = _estimate_shipping_cost(resolved_zone, resolved_weight_grams)
+    shipping_estimate = _estimate_shipping_cost(
+        resolved_weight_grams,
+        shipping_zone=resolved_zone,
+        department_code=department_code,
+        city_code=city_code
+    )
     risk_cost = gross_total * (risk_percent / Decimal("100"))
 
     variable_cost_total = product_cost_total + wompi_fee_total + shipping_estimate + packaging_cost + risk_cost
@@ -326,24 +378,24 @@ def _order_timeline(sale: Sale) -> list[dict]:
         {
             "code": "created",
             "label": "Pedido creado",
-            "at": sale.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "at": sale.created_at.isoformat(),
         }
     ]
 
     if sale.paid_at:
-        timeline.append({"code": "paid", "label": "Pago confirmado", "at": sale.paid_at.strftime("%Y-%m-%d %H:%M:%S")})
+        timeline.append({"code": "paid", "label": "Pago confirmado", "at": sale.paid_at.isoformat()})
     if sale.confirmed_at:
         timeline.append(
-            {"code": "processing", "label": "Pedido en preparacion", "at": sale.confirmed_at.strftime("%Y-%m-%d %H:%M:%S")}
+            {"code": "processing", "label": "Pedido en preparacion", "at": sale.confirmed_at.isoformat()}
         )
     if sale.shipped_at:
-        timeline.append({"code": "shipped", "label": "Pedido enviado", "at": sale.shipped_at.strftime("%Y-%m-%d %H:%M:%S")})
+        timeline.append({"code": "shipped", "label": "Pedido enviado", "at": sale.shipped_at.isoformat()})
     if sale.delivered_at:
         timeline.append(
-            {"code": "delivered", "label": "Pedido entregado", "at": sale.delivered_at.strftime("%Y-%m-%d %H:%M:%S")}
+            {"code": "delivered", "label": "Pedido entregado", "at": sale.delivered_at.isoformat()}
         )
     if sale.canceled_at:
-        timeline.append({"code": "canceled", "label": "Pedido cancelado", "at": sale.canceled_at.strftime("%Y-%m-%d %H:%M:%S")})
+        timeline.append({"code": "canceled", "label": "Pedido cancelado", "at": sale.canceled_at.isoformat()})
 
     return timeline
 
@@ -362,8 +414,8 @@ def _serialize_store_order(sale: Sale) -> dict:
         "payment_reference": sale.payment_reference,
         "is_order": sale.is_order,
         "total": str(sale.total),
-        "created_at": sale.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-        "updated_at": sale.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "created_at": sale.created_at.isoformat(),
+        "updated_at": sale.updated_at.isoformat(),
         "items": _serialize_sale_items(sale),
         "timeline": _order_timeline(sale),
         "shipment": _serialize_latest_shipment(sale),
@@ -912,6 +964,8 @@ class StoreCartValidateView(APIView):
             normalized_items,
             shipping_zone=shipping_zone,
             estimated_weight_grams=estimated_weight_grams,
+            department_code=serializer.validated_data.get("department_code"),
+            city_code=serializer.validated_data.get("city_code"),
         )
 
         return success_response(
@@ -965,7 +1019,12 @@ class StoreCheckoutView(APIView):
             items,
             shipping_zone=shipping_zone,
             estimated_weight_grams=estimated_weight_grams,
+            department_code=shipping_address.get("department_code"),
+            city_code=shipping_address.get("city_code"),
         )
+        # Sumar el envio al total si aplica
+        shipping_cost = _to_decimal(commercial.get("shipping_estimate", "0"))
+        total += shipping_cost
         if getattr(settings, "STORE_MARGIN_GUARD_ENABLED", False) and not commercial["is_viable_online"]:
             return error_response(
                 detail="El pedido no cumple el margen minimo para venta online con la configuracion actual.",
@@ -2009,10 +2068,13 @@ class StoreShippingQuoteView(APIView):
         destination = request.data.get("destination", {})
         weight_grams = request.data.get("weight_grams", 0)
 
-        if not destination or not destination.get("city") or not destination.get("department"):
+        city_code = destination.get("city_code")
+        department_code = destination.get("department_code")
+
+        if not city_code or not department_code:
             return error_response(
-                detail="Destino requerido (city y department)",
-                code="STORE_SHIPPING_QUOTE_INVALID_DESTINATION",
+                detail="Códigos de ciudad y departamento requeridos (city_code, department_code)",
+                code="STORE_SHIPPING_QUOTE_INVALID_CODES",
                 http_status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -2024,67 +2086,85 @@ class StoreShippingQuoteView(APIView):
             )
 
         try:
-            quote_data = self._get_mipaquete_quote(destination, weight_grams)
+            # Intentar primero con MiPaquete
+            services = self._get_mipaquete_quote(destination, weight_grams)
+            
+            # Si MiPaquete no tiene cobertura (lista vacía) o falla, usar fallback
+            if not services:
+                logger.info("MiPaquete no tiene cobertura para %s. Usando fallback.", city_code)
+                services = self._get_fallback_quote(destination, weight_grams)
+            
         except Exception as exc:
             logger.error("Error obteniendo cotización de MiPaquete: %s", exc)
-            # Fallback a estimación local si falla la API
-            quote_data = self._get_fallback_quote(destination, weight_grams)
+            services = self._get_fallback_quote(destination, weight_grams)
 
         return success_response(
             detail="Cotización obtenida correctamente",
             code="STORE_SHIPPING_QUOTE_OK",
             destination=destination,
             weight_grams=weight_grams,
-            services=quote_data,
+            services=services,
         )
 
     def _get_mipaquete_quote(self, destination, weight_grams):
         """
-        Consultar API de MiPaquete para obtener costos reales.
+        Consultar API de MiPaquete para obtener costos reales usando códigos DANE de 8 dígitos.
         """
-        base_url = str(getattr(settings, "STORE_SHIPPING_QUOTE_API_URL", "")).strip().rstrip("/")
-        if not base_url:
-            raise Exception("STORE_SHIPPING_QUOTE_API_URL no configurado")
+        # URL de la API de MiPaquete (v2)
+        base_url = str(getattr(settings, "STORE_SHIPPING_API_BASE_URL", "https://api-v2.mpr.mipaquete.com")).strip().rstrip("/")
+        quote_url = f"{base_url}/quoteShipping"
 
-        origin_city = str(getattr(settings, "STORE_SHIPPING_ORIGIN_CITY", "Bogotá")).strip()
-        origin_department = str(getattr(settings, "STORE_SHIPPING_ORIGIN_DEPARTMENT", "Cundinamarca")).strip()
+        # Origen predeterminado (Neiva, Huila)
+        origin_code = str(getattr(settings, "STORE_SHIPPING_ORIGIN_CITY_CODE", "41001000")).strip()
+        
+        # Destino (Transformar 5 dígitos a 8 agregando 000 al final)
+        dest_code = str(destination.get("city_code", "")).strip()
+        if len(dest_code) == 5:
+            dest_code = dest_code + "000"
+        elif not dest_code:
+            return []
+
+        # El peso debe ser entero en kg para MiPaquete (o Decimal?)
+        # Según docs es un número. Usaremos kg.
+        weight_kg = max(weight_grams / 1000, 1)
 
         payload = {
-            "origin": {
-                "city": origin_city,
-                "department": origin_department,
-            },
-            "destination": {
-                "city": destination["city"],
-                "department": destination["department"],
-            },
-            "package": {
-                "weight": weight_grams / 1000,  # Convertir a kg
-                "dimensions": {
-                    "length": 30,
-                    "width": 20,
-                    "height": 10,
-                }
-            }
+            "originLocationCode": origin_code,
+            "destinyLocationCode": dest_code,
+            "height": 10,  # Valores por defecto para cajas de zapatos
+            "width": 20,
+            "length": 30,
+            "weight": int(weight_kg),
+            "quantity": 1,
+            "declaredValue": 50000,  # Valor declarado mínimo razonable
+            "saleValue": 0
         }
 
-        response = _http_json(
-            base_url,
-            method="POST",
-            payload=payload,
-            headers=self._get_auth_headers(),
-        )
+        try:
+            response = _http_json(
+                quote_url,
+                method="POST",
+                payload=payload,
+                headers=self._get_auth_headers(),
+            )
+        except Exception:
+            # Silenciar errores de conexión y dejar que el post() maneje el fallback
+            return []
 
-        # Procesar respuesta de MiPaquete
         services = []
-        if isinstance(response, dict) and "services" in response:
-            for service_data in response["services"]:
+        # MiPaquete v2 retorna una lista directamente o dentro de un campo
+        # Si es una lista vacía [], significa que no hay cobertura.
+        data = response if isinstance(response, list) else response.get("data", [])
+        
+        if isinstance(data, list):
+            for s in data:
                 services.append({
-                    "name": service_data.get("name", "estándar"),
-                    "cost": str(service_data.get("cost", 0)),
-                    "eta_hours": service_data.get("eta_hours", 48),
-                    "available": service_data.get("available", True),
-                    "currency": service_data.get("currency", "COP"),
+                    "name": s.get("deliveryCompanyName", "estándar"),
+                    "cost": str(s.get("shippingCost", 0)),
+                    "eta_hours": s.get("shippingTime", 48) * 24 if isinstance(s.get("shippingTime"), int) else 48,
+                    "available": True,
+                    "currency": "COP",
+                    "provider": "mipaquete"
                 })
 
         return services
@@ -2095,7 +2175,12 @@ class StoreShippingQuoteView(APIView):
         """
         # Usar lógica existente de estimación
         zone = self._get_shipping_zone(destination)
-        estimated_cost = _estimate_shipping_cost(zone, weight_grams)
+        estimated_cost = _estimate_shipping_cost(
+            weight_grams,
+            shipping_zone=zone,
+            department_code=destination.get("department_code"),
+            city_code=destination.get("city_code")
+        )
 
         return [
             {
@@ -2144,18 +2229,16 @@ class StoreShippingQuoteView(APIView):
 @extend_schema(tags=["Store"])
 class StoreLocationsDepartmentsView(APIView):
     """
-    Obtiene lista de departamentos de Colombia.
+    Obtiene lista de departamentos de Colombia usando datos locales.
     """
-    permission_classes = []
+    permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        """
-        Lista de departamentos disponibles para envío usando MiPaquete.
-        """
         try:
-            departments = self._get_mipaquete_departments()
+            locations = self._load_locations()
+            departments = locations.get("departments", [])
         except Exception as exc:
-            logger.error("Error obteniendo departamentos de MiPaquete: %s", exc)
+            logger.error("Error obteniendo departamentos locales: %s", exc)
             departments = self._get_fallback_departments()
 
         return success_response(
@@ -2164,120 +2247,37 @@ class StoreLocationsDepartmentsView(APIView):
             departments=departments,
         )
 
-    def _get_mipaquete_departments(self):
-        """
-        Consulta la API de MiPaquete para listar departamentos.
-        """
-        from .shipping import _http_json
-        
-        base_url = str(getattr(settings, "STORE_SHIPPING_API_BASE_URL", "https://api.mipaquete.com")).strip().rstrip("/")
-        if not base_url:
-            raise Exception("STORE_SHIPPING_API_BASE_URL no configurado")
-
-        # El endpoint de MiPaquete para obtener ubicaciones
-        endpoint = f"{base_url}/v2/locations/departments"
-        
-        # Obtenemos los headers configurados anteriormente en views
-        headers = {"Content-Type": "application/json"}
-        auth_header = str(getattr(settings, "STORE_SHIPPING_AUTH_HEADER", "apikey")).strip()
-        auth_prefix = str(getattr(settings, "STORE_SHIPPING_AUTH_PREFIX", "")).strip()
-        api_key = str(getattr(settings, "STORE_SHIPPING_API_KEY", "")).strip()
-        
-        if api_key:
-            if auth_prefix:
-                headers[auth_header] = f"{auth_prefix} {api_key}"
-            else:
-                headers[auth_header] = api_key
-                
-        # Asegurar token JWT si requiere Authorization por defecto en MiPaquete web interface (A veces api_key se asume asi)
-        if "apikey" not in headers and "Authorization" not in headers:
-            headers["apikey"] = api_key
-
-        response = _http_json(endpoint, method="GET", headers=headers)
-        
-        departments = []
-        # Parseo flexible según la respuesta de MiPaquete
-        if isinstance(response, list):
-            items = response
-        elif isinstance(response, dict) and "data" in response:
-            items = response["data"]
-        else:
-            items = []
-            
-        for item in items:
-            name = item.get("departmentName") or item.get("name")
-            code = item.get("departmentCode") or item.get("_id") or item.get("code") or name
-            if code and name:
-                departments.append({"code": str(code), "name": str(name).title()})
-                
-        if not departments:
-            raise Exception("No se obtuvieron departamentos válidos")
-            
-        # Eliminar duplicados si los hay y ordenar
-        seen = set()
-        unique_departments = []
-        for d in departments:
-            if d["code"] not in seen:
-                seen.add(d["code"])
-                unique_departments.append(d)
-                
-        return sorted(unique_departments, key=lambda x: x["name"])
+    def _load_locations(self):
+        import os
+        import json
+        json_path = os.path.join(os.path.dirname(__file__), "colombia_locations.json")
+        if not os.path.exists(json_path):
+            raise Exception("No se encontró colombia_locations.json")
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
 
     def _get_fallback_departments(self):
-        """
-        Fallback a la lista local si falla la API.
-        """
         return sorted([
-            {"code": "amazonas", "name": "Amazonas"},
-            {"code": "antioquia", "name": "Antioquia"},
-            {"code": "arauca", "name": "Arauca"},
-            {"code": "atlantico", "name": "Atlántico"},
-            {"code": "bolivar", "name": "Bolívar"},
-            {"code": "boyaca", "name": "Boyacá"},
-            {"code": "caldas", "name": "Caldas"},
-            {"code": "caqueta", "name": "Caquetá"},
-            {"code": "casanare", "name": "Casanare"},
-            {"code": "cauca", "name": "Cauca"},
-            {"code": "cesar", "name": "Cesar"},
-            {"code": "choco", "name": "Chocó"},
-            {"code": "cordoba", "name": "Córdoba"},
-            {"code": "cundinamarca", "name": "Cundinamarca"},
-            {"code": "guainia", "name": "Guainía"},
-            {"code": "guaviare", "name": "Guaviare"},
-            {"code": "huila", "name": "Huila"},
-            {"code": "la_guajira", "name": "La Guajira"},
-            {"code": "magdalena", "name": "Magdalena"},
-            {"code": "meta", "name": "Meta"},
-            {"code": "narino", "name": "Nariño"},
-            {"code": "norte_de_santander", "name": "Norte de Santander"},
-            {"code": "putumayo", "name": "Putumayo"},
-            {"code": "quindio", "name": "Quindío"},
-            {"code": "risaralda", "name": "Risaralda"},
-            {"code": "san_andres", "name": "San Andrés y Providencia"},
-            {"code": "santander", "name": "Santander"},
-            {"code": "sucre", "name": "Sucre"},
-            {"code": "tolima", "name": "Tolima"},
-            {"code": "valle_del_cauca", "name": "Valle del Cauca"},
-            {"code": "vaupes", "name": "Vaupés"},
-            {"code": "vichada", "name": "Vichada"},
+            {"code": "41", "name": "Huila"},
+            {"code": "11", "name": "Bogotá D.C."},
+            {"code": "5", "name": "Antioquia"},
+            {"code": "76", "name": "Valle Del Cauca"},
         ], key=lambda x: x["name"])
 
 
 @extend_schema(tags=["Store"])
 class StoreLocationsCitiesView(APIView):
     """
-    Obtiene lista de ciudades de un departamento específico.
+    Obtiene lista de ciudades de un departamento específico usando datos locales.
     """
-    permission_classes = []
+    permission_classes = [permissions.AllowAny]
 
     def get(self, request, department_code: str):
-        """
-        Lista de ciudades disponibles para envío en un departamento usando MiPaquete.
-        """
         try:
-            cities = self._get_mipaquete_cities(department_code)
+            locations = StoreLocationsDepartmentsView()._load_locations()
+            cities = locations.get("cities", {}).get(department_code, [])
         except Exception as exc:
-            logger.error("Error obteniendo ciudades de MiPaquete para %s: %s", department_code, exc)
+            logger.error("Error obteniendo ciudades locales para %s: %s", department_code, exc)
             cities = self._get_fallback_cities(department_code)
 
         if not cities:
@@ -2294,138 +2294,10 @@ class StoreLocationsCitiesView(APIView):
             cities=cities,
         )
 
-    def _get_mipaquete_cities(self, department_code: str):
-        """
-        Consulta la API de MiPaquete para listar ciudades de un departamento.
-        """
-        from .shipping import _http_json
-        
-        base_url = str(getattr(settings, "STORE_SHIPPING_API_BASE_URL", "https://api.mipaquete.com")).strip().rstrip("/")
-        if not base_url:
-            raise Exception("STORE_SHIPPING_API_BASE_URL no configurado")
-
-        # Necesitamos el código DANE del departamento para buscar sus ciudades.
-        # Primero obtenemos todos los departamentos para buscar el código si no lo tenemos exacto.
-        departments = StoreLocationsDepartmentsView()._get_mipaquete_departments()
-        target_dep = next((d for d in departments if d["code"].lower() == department_code.lower() or d["name"].lower() == department_code.replace("_", " ").lower()), None)
-        
-        real_dep_code = target_dep["code"] if target_dep else department_code
-
-        endpoint = f"{base_url}/v2/locations/cities/{real_dep_code}"
-        
-        headers = {"Content-Type": "application/json"}
-        auth_header = str(getattr(settings, "STORE_SHIPPING_AUTH_HEADER", "apikey")).strip()
-        auth_prefix = str(getattr(settings, "STORE_SHIPPING_AUTH_PREFIX", "")).strip()
-        api_key = str(getattr(settings, "STORE_SHIPPING_API_KEY", "")).strip()
-        
-        if api_key:
-            if auth_prefix:
-                headers[auth_header] = f"{auth_prefix} {api_key}"
-            else:
-                headers[auth_header] = api_key
-                
-        if "apikey" not in headers and "Authorization" not in headers:
-            headers["apikey"] = api_key
-
-        response = _http_json(endpoint, method="GET", headers=headers)
-        
-        cities = []
-        if isinstance(response, list):
-            items = response
-        elif isinstance(response, dict) and "data" in response:
-            items = response["data"]
-        else:
-            items = []
-            
-        for item in items:
-            name = item.get("cityName") or item.get("name")
-            code = item.get("cityCode") or item.get("_id") or item.get("code") or name
-            if code and name:
-                cities.append({"code": str(code), "name": str(name).title()})
-                
-        if not cities:
-            raise Exception(f"No se obtuvieron ciudades válidas para el departamento {real_dep_code}")
-            
-        seen = set()
-        unique_cities = []
-        for c in cities:
-            if c["code"] not in seen:
-                seen.add(c["code"])
-                unique_cities.append(c)
-                
-        return sorted(unique_cities, key=lambda x: x["name"])
-
     def _get_fallback_cities(self, department_code: str):
-        """
-        Fallback a la lista local de ciudades si falla la API.
-        """
-        cities_by_department = {
-            "amazonas": [{"code": "leticia", "name": "Leticia"}],
-            "antioquia": [
-                {"code": "medellin", "name": "Medellín"},
-                {"code": "bello", "name": "Bello"},
-                {"code": "itagui", "name": "Itagüí"},
-                {"code": "envigado", "name": "Envigado"},
-                {"code": "apartado", "name": "Apartadó"},
-                {"code": "rionegro", "name": "Rionegro"},
-                {"code": "turbo", "name": "Turbo"},
-            ],
-            "arauca": [{"code": "arauca", "name": "Arauca"}],
-            "atlantico": [
-                {"code": "barranquilla", "name": "Barranquilla"},
-                {"code": "soledad", "name": "Soledad"},
-                {"code": "malambo", "name": "Malambo"},
-                {"code": "puerto_colombia", "name": "Puerto Colombia"},
-                {"code": "sabanagrande", "name": "Sabanagrande"},
-            ],
-            "bolivar": [{"code": "cartagena", "name": "Cartagena"}, {"code": "magangue", "name": "Magangué"}],
-            "boyaca": [{"code": "tunja", "name": "Tunja"}, {"code": "duitama", "name": "Duitama"}, {"code": "sogamoso", "name": "Sogamoso"}],
-            "caldas": [{"code": "manizales", "name": "Manizales"}, {"code": "la_dorada", "name": "La Dorada"}],
-            "caqueta": [{"code": "florencia", "name": "Florencia"}],
-            "casanare": [{"code": "yopal", "name": "Yopal"}],
-            "cauca": [{"code": "popayan", "name": "Popayán"}],
-            "cesar": [{"code": "valledupar", "name": "Valledupar"}],
-            "choco": [{"code": "quibdo", "name": "Quibdó"}],
-            "cordoba": [{"code": "monteria", "name": "Montería"}, {"code": "lorica", "name": "Lorica"}],
-            "cundinamarca": [
-                {"code": "bogota", "name": "Bogotá D.C."},
-                {"code": "soacha", "name": "Soacha"},
-                {"code": "zipaquira", "name": "Zipaquirá"},
-                {"code": "chia", "name": "Chía"},
-                {"code": "cajica", "name": "Cajicá"},
-                {"code": "mosquera", "name": "Mosquera"},
-                {"code": "facaatativa", "name": "Facatativá"},
-                {"code": "girardot", "name": "Girardot"},
-            ],
-            "guainia": [{"code": "inirida", "name": "Inírida"}],
-            "guaviare": [{"code": "san_jose_del_guaviare", "name": "San José del Guaviare"}],
-            "huila": [{"code": "neiva", "name": "Neiva"}, {"code": "pitalito", "name": "Pitalito"}],
-            "la_guajira": [{"code": "riohacha", "name": "Riohacha"}, {"code": "maicao", "name": "Maicao"}],
-            "magdalena": [{"code": "santa_marta", "name": "Santa Marta"}, {"code": "cienaga", "name": "Ciénaga"}],
-            "meta": [{"code": "villavicencio", "name": "Villavicencio"}, {"code": "acacias", "name": "Acacías"}],
-            "narino": [{"code": "pasto", "name": "Pasto"}, {"code": "ipiales", "name": "Ipiales"}, {"code": "tumaco", "name": "Tumaco"}],
-            "norte_de_santander": [{"code": "cucuta", "name": "Cúcuta"}, {"code": "ocana", "name": "Ocaña"}],
-            "putumayo": [{"code": "mocoa", "name": "Mocoa"}, {"code": "puerto_asis", "name": "Puerto Asís"}],
-            "quindio": [{"code": "armenia", "name": "Armenia"}, {"code": "calarca", "name": "Calarcá"}],
-            "risaralda": [{"code": "pereira", "name": "Pereira"}, {"code": "dosquebradas", "name": "Dosquebradas"}],
-            "san_andres": [{"code": "san_andres", "name": "San Andrés"}],
-            "santander": [{"code": "bucaramanga", "name": "Bucaramanga"}, {"code": "floridablanca", "name": "Floridablanca"}, {"code": "barrancabermeja", "name": "Barrancabermeja"}],
-            "sucre": [{"code": "sincelejo", "name": "Sincelejo"}, {"code": "corozal", "name": "Corozal"}],
-            "tolima": [{"code": "ibague", "name": "Ibagué"}, {"code": "espinal", "name": "Espinal"}],
-            "valle_del_cauca": [
-                {"code": "cali", "name": "Cali"},
-                {"code": "palmira", "name": "Palmira"},
-                {"code": "tulua", "name": "Tuluá"},
-                {"code": "buga", "name": "Buga"},
-                {"code": "cartago", "name": "Cartago"},
-                {"code": "jamundi", "name": "Jamundí"},
-            ],
-            "vaupes": [{"code": "mitu", "name": "Mitú"}],
-            "vichada": [{"code": "puerto_carreno", "name": "Puerto Carreño"}],
-        }
-
-        return cities_by_department.get(department_code.lower(), [])
-
+        if department_code == "41":
+            return [{"code": "41001", "name": "Neiva"}, {"code": "41518", "name": "Palermo"}]
+        return []
 
 @extend_schema(tags=["Store"])
 class StorePickupPointsView(APIView):

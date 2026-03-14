@@ -156,8 +156,9 @@ class ReportingService:
     @staticmethod
     def low_stock_variants():
         """Retorna variantes con stock bajo"""
+        from django.db.models.functions import Coalesce
         variants = ProductVariant.objects.annotate(
-            current_stock=Sum("movements__quantity")
+            current_stock=Coalesce(Sum("movements__quantity"), 0)
         )
         
         return variants.filter(

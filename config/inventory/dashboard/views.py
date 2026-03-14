@@ -4,7 +4,7 @@ Views para dashboard y estadísticas
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Sum, Count, DecimalField, Max
+from django.db.models import Sum, Count, DecimalField, Max, F, Q
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from datetime import timedelta
@@ -139,11 +139,10 @@ class DashboardViewSet(viewsets.GenericViewSet):
         
         low_stock = low_stock_variants()
         
-        # Filtrar por umbral si se proporciona
-        if threshold > 0:
-            low_stock = low_stock.annotate(
-                current_stock=Coalesce(Sum('movements__quantity'), 0, output_field=DecimalField())
-            ).filter(current_stock__lte=threshold)
+        # Lógica inclusiva: debajo del umbral O debajo del mínimo configurado
+        low_stock = low_stock.filter(
+            Q(current_stock__lte=threshold) | Q(current_stock__lte=F('stock_minimum'))
+        )
         
         data = []
         for variant in low_stock:

@@ -62,10 +62,15 @@ class ProductImageSerializer(serializers.ModelSerializer):
 class ProductVariantSerializer(serializers.ModelSerializer):
     """Serializer para variantas de productos"""
     stock = serializers.IntegerField(read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
 
     class Meta:
         model = ProductVariant
-        fields = "__all__"
+        fields = [
+            'id', 'product', 'product_name', 'gender', 'color', 'size', 
+            'price', 'cost', 'stock_minimum', 'stock', 'active', 
+            'created_at', 'updated_at', 'is_deleted'
+        ]
         read_only_fields = ["created_by", "updated_by"]
 
 

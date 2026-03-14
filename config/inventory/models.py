@@ -493,6 +493,7 @@ class StoreBranding(models.Model):
     favicon_url = models.URLField(blank=True, default="")
     hero_title = models.CharField(max_length=140, blank=True, default="")
     hero_subtitle = models.CharField(max_length=220, blank=True, default="")
+    hero_image_url = models.URLField(blank=True, default="")
     legal_representative_name = models.CharField(max_length=140, blank=True, default="")
     legal_id_type = models.CharField(max_length=20, blank=True, default="NIT")
     legal_id_number = models.CharField(max_length=40, blank=True, default="")

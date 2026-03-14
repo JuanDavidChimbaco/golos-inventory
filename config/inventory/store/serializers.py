@@ -167,6 +167,8 @@ class StoreCartValidateSerializer(serializers.Serializer):
         default="regional",
     )
     estimated_weight_grams = serializers.IntegerField(required=False, min_value=1)
+    department_code = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    city_code = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     def validate_items(self, items: list[dict]) -> list[dict]:
         validator = StoreItemsValidationSerializer(data={"items": items})
@@ -196,7 +198,7 @@ class StoreCheckoutSerializer(serializers.Serializer):
                 raise serializers.ValidationError(f"{key} es requerido.")
             cleaned[key] = field_value
 
-        optional_keys = ["address_line2", "reference", "postal_code"]
+        optional_keys = ["address_line2", "reference", "postal_code", "department_code", "city_code"]
         for key in optional_keys:
             cleaned[key] = str(value.get(key, "")).strip()
 
@@ -218,6 +220,7 @@ class StoreBrandingSerializer(serializers.ModelSerializer):
             "favicon_url",
             "hero_title",
             "hero_subtitle",
+            "hero_image_url",
             "legal_representative_name",
             "legal_id_type",
             "legal_id_number",
@@ -248,6 +251,7 @@ class StoreBrandingUpdateSerializer(serializers.ModelSerializer):
             "favicon_url",
             "hero_title",
             "hero_subtitle",
+            "hero_image_url",
             "legal_representative_name",
             "legal_id_type",
             "legal_id_number",

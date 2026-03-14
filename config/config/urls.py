@@ -87,7 +87,7 @@ class CustomTokenRefreshView(TokenRefreshView):
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
-router = routers.SimpleRouter()
+router = routers.DefaultRouter()
 router.register(
     r"users", 
     views.UserViewSet, 
@@ -107,11 +107,6 @@ router.register(
     r"dashboard", 
     views.DashboardViewSet, 
     basename="dashboard"
-)
-router.register(
-    r"export", 
-    views.ExportViewSet,
-    basename="export"
 )
 router.register(
     r"batch", 
@@ -200,8 +195,8 @@ urlpatterns = [
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     path("api/token/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
-    # API endpoints
     path("api/", include(router.urls)),
+    
     path("api/store/products/", StoreProductListView.as_view(), name="store-products"),
     path("api/store/products/<int:product_id>/", StoreProductDetailView.as_view(), name="store-product-detail"),
     path("api/store/branding/", StoreBrandingView.as_view(), name="store-branding"),

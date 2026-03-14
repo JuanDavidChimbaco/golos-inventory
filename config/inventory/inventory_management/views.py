@@ -202,7 +202,13 @@ class InventoryCloseMonthView(APIView):
                 code="INVALID_MONTH_FORMAT",
             )
 
-        close_inventory_month(year=year, month=month_num)
+        try:
+            close_inventory_month(year=year, month=month_num)
+        except ValidationError as e:
+            return error_response(
+                detail=str(e.messages[0]) if hasattr(e, 'messages') else str(e),
+                code="MONTH_ALREADY_CLOSED",
+            )
 
         return success_response(
             detail="Mes cerrado correctamente",

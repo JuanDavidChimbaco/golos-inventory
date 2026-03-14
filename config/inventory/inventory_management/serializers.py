@@ -30,16 +30,21 @@ class InventoryHistorySerializer(serializers.ModelSerializer):
         source="variant.product.name",
         read_only=True
     )
-    product_sku = serializers.CharField(
-        source="variant.product.sku",
-        read_only=True
-    )
     variant_name = serializers.CharField(
-        source="variant.name",
+        source="variant.product.name",
         read_only=True
     )
-    variant_sku = serializers.CharField(
-        source="variant.sku",
+    variant_color = serializers.CharField(
+        source="variant.color",
+        read_only=True
+    )
+    variant_size = serializers.CharField(
+        source="variant.size",
+        read_only=True
+    )
+    supplier_name = serializers.CharField(
+        source="supplier.name",
+        allow_null=True,
         read_only=True
     )
     movement_type_display = serializers.SerializerMethodField()
@@ -52,8 +57,8 @@ class InventoryHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = MovementInventory
         fields = [
-            "id", "product", "product_sku", "variant", "variant_name", 
-            "variant_sku", "movement_type_display", 
+            "id", "product", "variant", "variant_name", "variant_color", "variant_size",
+            "supplier", "supplier_name", "movement_type_display", 
             "quantity", "stock_after","stock_before","direction",
             "color", "icon", "observation", "created_at", "created_by"
         ]

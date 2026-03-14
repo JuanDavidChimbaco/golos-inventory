@@ -16,7 +16,6 @@ from .inventory_management.views import (
 )
 from .purchase.views import PurchaseViewSet
 from .dashboard.views import DashboardViewSet
-from .export.views import ExportViewSet
 from .batch.views import BatchOperationsViewSet
 from .notifications.views import NotificationViewSet
 
@@ -48,8 +47,6 @@ __all__ = [
     "PurchaseViewSet",
     # Dashboard
     "DashboardViewSet",
-    # Export
-    "ExportViewSet",
     # Batch
     "BatchOperationsViewSet",
     # Notifications
