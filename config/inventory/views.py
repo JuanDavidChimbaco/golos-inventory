@@ -18,6 +18,11 @@ from .purchase.views import PurchaseViewSet
 from .dashboard.views import DashboardViewSet
 from .batch.views import BatchOperationsViewSet
 from .notifications.views import NotificationViewSet
+from .finance.views import (
+    FinancialCategoryViewSet,
+    FinancialTransactionViewSet,
+    CashSessionViewSet
+)
 
 # Exportar todos los ViewSets para que estén disponibles
 __all__ = [
@@ -51,4 +56,8 @@ __all__ = [
     "BatchOperationsViewSet",
     # Notifications
     "NotificationViewSet",
+    # Finance
+    "FinancialCategoryViewSet",
+    "FinancialTransactionViewSet",
+    "CashSessionViewSet",
 ]

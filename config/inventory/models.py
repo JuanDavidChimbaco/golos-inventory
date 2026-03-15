@@ -521,6 +521,105 @@ class StoreBranding(models.Model):
         return self.store_name
 
 
+# --- MODELOS FINANCIEROS Y CONTROL DE CAJA ---
+
+class FinancialCategory(models.Model):
+    """Categoría para ingresos y egresos (Arriendo, Servicios, Nómina, Inversión, etc.)"""
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    is_income = models.BooleanField(default=False, help_text="True si es una categoría de ingreso, False si es egreso")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Categoría Financiera"
+        verbose_name_plural = "Categorías Financieras"
+        ordering = ["name"]
+
+    def __str__(self):
+        type_str = "Ingreso" if self.is_income else "Egreso"
+        return f"{self.name} ({type_str})"
+
+
+class CashSession(models.Model):
+    """Sesión de caja (Control de apertura y cierre de caja física)"""
+    STATUS_CHOICES = [
+        ('open', 'Abierta'),
+        ('closed', 'Cerrada'),
+    ]
+
+    opened_at = models.DateTimeField(auto_now_add=True)
+    opened_by = models.CharField(max_length=50)
+    initial_balance = models.DecimalField(max_digits=12, decimal_places=2, help_text="Base de caja al abrir")
+    
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_by = models.CharField(max_length=50, null=True, blank=True)
+    
+    # Estos campos se calculan al cerrar
+    expected_balance = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Balance esperado según sistema")
+    actual_balance = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Dinero físico contado")
+    difference = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Diferencia entre esperado y real")
+    
+    notes = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='open')
+
+    class Meta:
+        verbose_name = "Sesión de Caja"
+        verbose_name_plural = "Sesiones de Caja"
+        ordering = ["-opened_at"]
+
+    def __str__(self):
+        return f"Caja {self.id} - {self.opened_at.strftime('%Y-%m-%d')} ({self.status})"
+
+
+class FinancialTransaction(models.Model):
+    """Transacción financiera (Registro de cada movimiento de dinero)"""
+    TRANSACTION_TYPES = [
+        ('income', 'Ingreso'),
+        ('expense', 'Egreso'),
+    ]
+    
+    session = models.ForeignKey(
+        CashSession, 
+        on_delete=models.PROTECT, 
+        related_name="transactions", 
+        null=True, 
+        blank=True,
+        help_text="Sesión de caja a la que pertenece este movimiento (opcional si es bancario)"
+    )
+    category = models.ForeignKey(
+        FinancialCategory, 
+        on_delete=models.PROTECT, 
+        related_name="transactions",
+        null=True,
+        blank=True
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPES)
+    description = models.TextField()
+    
+    # Vínculo con ventas para trazabilidad
+    sale = models.ForeignKey(
+        Sale, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name="financial_transactions"
+    )
+    
+    payment_method = models.CharField(max_length=30, default="cash")
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.CharField(max_length=50)
+
+    class Meta:
+        verbose_name = "Transacción Financiera"
+        verbose_name_plural = "Transacciones Financieras"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.transaction_type.upper()} ({self.amount}): {self.description[:50]}"
+
+
 class Shipment(models.Model):
     """
     Envío de una orden de la tienda.

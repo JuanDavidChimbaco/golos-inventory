@@ -188,6 +188,21 @@ router.register(
     views.SupplierReturnViewSet, 
     basename="supplier-returns"
 )
+router.register(
+    r"financial-categories", 
+    views.FinancialCategoryViewSet, 
+    basename="financial-categories"
+)
+router.register(
+    r"financial-transactions", 
+    views.FinancialTransactionViewSet, 
+    basename="financial-transactions"
+)
+router.register(
+    r"cash-sessions", 
+    views.CashSessionViewSet, 
+    basename="cash-sessions"
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
