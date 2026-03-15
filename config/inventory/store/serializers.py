@@ -188,6 +188,8 @@ class StoreCheckoutSerializer(serializers.Serializer):
     )
     estimated_weight_grams = serializers.IntegerField(required=False, min_value=1)
     shipping_address = serializers.DictField(required=True)
+    invoice_required = serializers.BooleanField(required=False, default=False)
+    billing_data = serializers.DictField(required=False, allow_null=True)
 
     def validate_shipping_address(self, value: dict) -> dict:
         required_keys = ["department", "city", "address_line1", "recipient_name", "recipient_phone"]
@@ -237,6 +239,8 @@ class StoreBrandingSerializer(serializers.ModelSerializer):
             "promo_bottom_enabled",
             "promo_bottom_title",
             "promo_bottom_text",
+            "maintenance_mode",
+            "maintenance_message",
             "updated_at",
         ]
 
@@ -268,6 +272,8 @@ class StoreBrandingUpdateSerializer(serializers.ModelSerializer):
             "promo_bottom_enabled",
             "promo_bottom_title",
             "promo_bottom_text",
+            "maintenance_mode",
+            "maintenance_message",
         ]
 
 

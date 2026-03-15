@@ -294,6 +294,32 @@ class Sale(models.Model):
     active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # --- Campos para Facturación Electrónica y POS ---
+    invoice_required = models.BooleanField(
+        default=False, 
+        help_text="Indica si el cliente solicitó factura electrónica"
+    )
+    invoicing_method = models.CharField(
+        max_length=20,
+        choices=[
+            ('NONE', 'Solo Tiquete POS'),
+            ('AUTOMATIC', 'Automático (Factus)'),
+            ('MANUAL', 'Manual (Portal DIAN)')
+        ],
+        default='NONE',
+        help_text="Método preferido para la emisión de la factura"
+    )
+    document_number = models.CharField(
+        max_length=40, 
+        blank=True, 
+        null=True, 
+        help_text="Número consecutivo legal (PRE-001, SETT-123, etc.)"
+    )
+    is_electronic_invoice = models.BooleanField(
+        default=False, 
+        help_text="True si este documento fue emitido como Factura Electrónica ante la DIAN"
+    )
+
     class Meta:
         permissions = [
             # Permisos personalizados únicos (los demás son creados automáticamente por Django)
@@ -510,6 +536,15 @@ class StoreBranding(models.Model):
     promo_bottom_enabled = models.BooleanField(default=False)
     promo_bottom_title = models.CharField(max_length=120, blank=True, default="")
     promo_bottom_text = models.CharField(max_length=260, blank=True, default="")
+    
+    # --- Modo Mantenimiento ---
+    maintenance_mode = models.BooleanField(default=False, help_text="Activa la página de 'Estamos trabajando en el sitio'")
+    maintenance_message = models.TextField(
+        blank=True, 
+        default="Estamos mejorando nuestra tienda para ti. Volveremos pronto.",
+        help_text="Mensaje que verán los clientes cuando la tienda esté en mantenimiento"
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.CharField(max_length=50, blank=True, default="system")
 
@@ -682,3 +717,76 @@ class ShipmentEvent(models.Model):
 
     def __str__(self):
         return f"{self.shipment.tracking_number} - {self.event_type}"
+
+
+# --- MODELOS DE FACTURACIÓN ELECTRÓNICA (DIAN / FACTUS) ---
+
+class ElectronicInvoice(models.Model):
+    """
+    Representa el documento legal emitido ante la DIAN mediante un proveedor tecnológico.
+    """
+    DIAN_STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('sent', 'Enviado'),
+        ('accepted', 'Aceptado por DIAN'),
+        ('rejected', 'Rechazado por DIAN'),
+        ('failed', 'Error de Comunicación'),
+    ]
+
+    sale = models.OneToOneField(
+        Sale, 
+        on_delete=models.PROTECT, 
+        related_name="electronic_invoice"
+    )
+    
+    # Datos retornados por el proveedor (Factus/Siigo)
+    external_id = models.CharField(
+        max_length=100, 
+        unique=True, 
+        help_text="ID interno del proveedor de facturación"
+    )
+    number = models.CharField(
+        max_length=40, 
+        help_text="Número de factura (ej: SETT-1234)"
+    )
+    cufe = models.CharField(
+        max_length=120, 
+        blank=True, 
+        null=True, 
+        help_text="Código Único de Factura Electrónica"
+    )
+    qr_data = models.TextField(
+        blank=True, 
+        null=True, 
+        help_text="Contenido del código QR legal"
+    )
+    pdf_url = models.URLField(
+        blank=True, 
+        null=True, 
+        help_text="Link al PDF oficial del proveedor"
+    )
+    xml_url = models.URLField(
+        blank=True, 
+        null=True, 
+        help_text="Link al XML legal"
+    )
+    
+    status = models.CharField(
+        max_length=20, 
+        choices=DIAN_STATUS_CHOICES, 
+        default='pending'
+    )
+    status_message = models.TextField(blank=True, null=True)
+    
+    # Tiempos
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    dian_response_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Factura Electrónica"
+        verbose_name_plural = "Facturas Electrónicas"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Factura {self.number} - {self.status}"

@@ -23,6 +23,7 @@ from .serializers import (
     SaleReturnCreateSerializer,
     SaleReturnSerializer,
 )
+from ..core.factus_service import FactusService
 
 
 @extend_schema(tags=["Sales"])
@@ -78,9 +79,31 @@ class SaleViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            SaleService.confirm_sale(sale_id=pk, user=request.user)
+            sale = SaleService.confirm_sale(
+                sale_id=pk, 
+                user=request.user, 
+                invoice_required=(request.data.get('invoicing_method') != 'NONE')
+            )
+
+            # --- NUEVO: Hook de Facturación Electrónica ---
+            # Solo si el método es AUTOMATIC (Factus)
+            method = request.data.get('invoicing_method', sale.invoicing_method)
+            is_automatic = method == 'AUTOMATIC'
+            
+            if is_automatic:
+                # Intentar crear la factura en Factus
+                # En producción esto debería ser un background task (Celery/Huey)
+                invoice, error = FactusService.create_invoice(sale)
+                if error:
+                    # Registramos el error pero no revertimos la confirmación de inventario
+                    # ya que el stock ya se movió. El usuario podrá reintentar luego.
+                    return success_response(
+                        detail=f"Venta confirmada, pero hubo un error con la DIAN (Factus): {error}",
+                        code="SALE_CONFIRMED_INVOICE_FAILED",
+                    )
+                
             return success_response(
-                detail="Venta confirmada y stock actualizado",
+                detail="Venta confirmada y Factura Electrónica generada exitosamente" if is_automatic else "Venta confirmada (Documento POS generado)",
                 code="SALE_CONFIRMED",
             )
         except ValidationError as e:

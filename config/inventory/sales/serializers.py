@@ -4,7 +4,7 @@ Serializers para gestión de ventas
 from rest_framework import serializers
 from django.db import models
 from django.utils import timezone
-from ..models import Sale, SaleDetail, MovementInventory, ProductVariant
+from ..models import Sale, SaleDetail, MovementInventory, ProductVariant, ElectronicInvoice
 
 
 class EmptySerializer(serializers.Serializer):
@@ -77,7 +77,7 @@ class SaleCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Sale
-        fields = ["customer", "is_order", "payment_method", "payment_reference"]
+        fields = ["id", "customer", "is_order", "payment_method", "payment_reference", "invoice_required", "invoicing_method"]
 
     def validate_payment_method(self, value: str) -> str:
         return value.strip().upper()
@@ -132,9 +132,20 @@ class SaleDetailReadSerializer(serializers.ModelSerializer):
         return ProductVariantSerializer(obj.variant).data
 
 
+class ElectronicInvoiceSerializer(serializers.ModelSerializer):
+    """Serializer para facturas electrónicas registradas en Factus"""
+    class Meta:
+        model = ElectronicInvoice
+        fields = [
+            "id", "external_id", "number", "cufe", "qr_data", 
+            "pdf_url", "xml_url", "status", "created_at", "sent_at"
+        ]
+
+
 class SaleReadSerializer(serializers.ModelSerializer):
     """Serializer para leer datos de ventas"""
     details = SaleDetailReadSerializer(many=True, read_only=True)
+    electronic_invoice = ElectronicInvoiceSerializer(read_only=True)
 
     class Meta:
         model = Sale

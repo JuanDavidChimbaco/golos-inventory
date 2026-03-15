@@ -93,8 +93,32 @@ class SaleService:
             },
         )
     
+    @staticmethod
+    def _assign_document_number(sale: Sale) -> str:
+        """
+        Asigna el siguiente número consecutivo para el documento.
+        Para una implementación profesional, esto debería usar rangos de numeración
+        configurables.
+        """
+        # Ejemplo simple: POS-0001, POS-0002...
+        last_sale = Sale.objects.filter(
+            document_number__startswith="POS-"
+        ).order_by("-document_number").first()
+        
+        if not last_sale or not last_sale.document_number:
+            next_num = 1
+        else:
+            try:
+                # Extraer el número después de 'POS-'
+                last_num = int(last_sale.document_number.split('-')[1])
+                next_num = last_num + 1
+            except (IndexError, ValueError):
+                next_num = 1
+        
+        return f"POS-{next_num:05d}"
+
     @classmethod
-    def confirm_sale(cls, sale_id: int, user) -> None:
+    def confirm_sale(cls, sale_id: int, user, invoice_required=False) -> Sale:
         """Confirma una venta y actualiza el inventario"""
         with transaction.atomic():
             # Traer la venta con bloqueo para evitar concurrentes
@@ -102,6 +126,13 @@ class SaleService:
             
             # Validaciones
             cls._validate_sale_for_confirmation(sale)
+            
+            # Asignar numeración si no tiene
+            if not sale.document_number:
+                sale.document_number = cls._assign_document_number(sale)
+            
+            # Configurar flags de facturación
+            sale.invoice_required = invoice_required
             
             # Confirmar venta
             sale.status = "completed"
@@ -113,6 +144,8 @@ class SaleService:
             
             # Registrar auditoría
             cls._log_sale_confirmation(sale, user)
+
+            return sale
 
 
 # Función de compatibilidad - mantener la interfaz original

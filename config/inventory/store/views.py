@@ -96,6 +96,8 @@ DEFAULT_STORE_BRANDING = {
     "promo_bottom_enabled": False,
     "promo_bottom_title": "",
     "promo_bottom_text": "",
+    "maintenance_mode": False,
+    "maintenance_message": "Estamos mejorando nuestra tienda para ti. Volveremos pronto.",
 }
 
 CUSTOMER_GROUP_NAME = "Customers"
@@ -1035,13 +1037,20 @@ class StoreCheckoutView(APIView):
 
         created_by = request.user.username
 
+        # Consolidar metadatos comerciales
+        commercial_metadata = commercial
+        if validated.get("billing_data"):
+            commercial_metadata["billing_data"] = validated["billing_data"]
+
         sale = Sale.objects.create(
             customer=customer,
             created_by=created_by,
             shipping_address=shipping_address,
             is_order=validated.get("is_order", True),
             total=total,
-            commercial_metadata=commercial,
+            commercial_metadata=commercial_metadata,
+            invoice_required=validated.get("invoice_required", False),
+            invoicing_method='AUTOMATIC' if validated.get("invoice_required") else 'NONE',
             status="pending",
             payment_status="unpaid",
             payment_reference=f"ORD-{uuid4().hex[:12].upper()}",
