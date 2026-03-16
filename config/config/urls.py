@@ -51,6 +51,7 @@ from inventory.store.views import (
     StoreWompiHealthView,
     StoreOpsOrderListView,
     StoreOpsManualShipmentView,
+    StoreOpsAutoShipmentView,
     StoreOpsOrderStatusUpdateView,
     StoreOpsSummaryView,
     StoreOpsBrandingView,
@@ -235,6 +236,7 @@ urlpatterns = [
     path("api/store/wompi/health/", StoreWompiHealthView.as_view(), name="store-wompi-health"),
     path("api/store/ops/orders/", StoreOpsOrderListView.as_view(), name="store-ops-orders"),
     path("api/store/ops/orders/<int:sale_id>/shipment/manual/", StoreOpsManualShipmentView.as_view(), name="store-ops-order-shipment-manual"),
+    path("api/store/ops/orders/<int:sale_id>/shipment/auto/", StoreOpsAutoShipmentView.as_view(), name="store-ops-order-shipment-auto"),
     path("api/store/ops/orders/<int:sale_id>/status/", StoreOpsOrderStatusUpdateView.as_view(), name="store-ops-order-status"),
     path("api/store/ops/orders/<int:sale_id>/delivery-notification/", StoreOpsDeliveryNotificationView.as_view(), name="store-ops-delivery-notification"),
     path("api/store/ops/orders/<int:sale_id>/delivery-verification/", StoreOpsDeliveryVerificationView.as_view(), name="store-ops-delivery-verification"),
@@ -242,7 +244,7 @@ urlpatterns = [
     path("api/store/ops/branding/", StoreOpsBrandingView.as_view(), name="store-ops-branding"),
     # Public delivery tracking and confirmation
     path("api/store/delivery-confirmation/<int:sale_id>/<str:token>/", StoreDeliveryConfirmationView.as_view(), name="store-delivery-confirmation"),
-    path("api/store/tracking/<str:tracking_number>/", StoreDeliveryTrackingPublicView.as_view(), name="store-tracking-public"),
+    path("api/store/shipping/track/<str:tracking_number>/", StoreDeliveryTrackingPublicView.as_view(), name="store-tracking-public"),
     path("inventory/close-month/", views.InventoryCloseMonthView.as_view()),
     # API Documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

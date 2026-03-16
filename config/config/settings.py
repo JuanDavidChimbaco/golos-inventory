@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'django_filters',
     'storages',
     # Propias
-    'inventory',
+    'inventory.apps.InventoryConfig',
 ]
 
 # ─── Middleware ───────────────────────────────────────────────────────────────

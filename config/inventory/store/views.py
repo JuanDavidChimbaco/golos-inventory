@@ -147,22 +147,18 @@ def _get_location_zone(department_code: str, city_code: str) -> str:
     Caquetá: 18
     """
     dep_code = str(department_code)
-    # Local: Huila (Neiva 41001, Palermo 41518)
+    # Local: Solo Neiva (41001)
     if dep_code == "41":
-        # Extraer primeros 5 dígitos para comparación local
         clean_city = str(city_code)[:5]
-        if clean_city in {"41001", "41524"}:
+        if clean_city == "41001":
              return "local"
         return "regional"
     
-    # Regional: Tolima, Caquetá
+    # Regional: Tolima (73), Caquetá (18)
     if dep_code in {"73", "18"}:
         return "regional"
     
-    # Especial: Amazonas, San Andrés, etc. (Podríamos mapearlo a national o una zona más cara si existe)
-    if dep_code in {"91", "88", "94", "95", "97", "99"}:
-        return "national" # O "special" si la matriz lo soporta
-        
+    # Resto es National
     return "national"
 
 
@@ -1686,6 +1682,33 @@ class StoreOpsOrderStatusUpdateView(APIView):
 
         sale.save(update_fields=list(dict.fromkeys(fields_to_update)))
 
+        # Sincronizar estado del envío si existe
+        shipment = sale.shipments.first()
+        if shipment:
+            shipment_status_map = {
+                "shipped": Shipment.ShipmentStatus.IN_TRANSIT,
+                "delivered": Shipment.ShipmentStatus.DELIVERED,
+                "completed": Shipment.ShipmentStatus.DELIVERED,
+                "canceled": Shipment.ShipmentStatus.CANCELED,
+            }
+            new_shipment_status = shipment_status_map.get(next_status)
+            if new_shipment_status and shipment.status != new_shipment_status:
+                shipment.status = new_shipment_status
+                shipment.save(update_fields=["status", "updated_at"])
+                
+                # Registrar evento para el historial
+                ShipmentEvent.objects.create(
+                    shipment=shipment,
+                    provider_event_id=f"ops_status_update_{shipment.id}_{now.timestamp()}",
+                    event_type=next_status,
+                    payload={
+                        "status": next_status,
+                        "description": f"Estado de la orden actualizado manualmente a {next_status}",
+                        "source": "ops_manual_update"
+                    },
+                    occurred_at=now
+                )
+
         AuditLog.objects.create(
             action="store_order_status_update",
             entity="sale",
@@ -1701,6 +1724,75 @@ class StoreOpsOrderStatusUpdateView(APIView):
             detail="Estado de la orden actualizado correctamente",
             code="STORE_OPS_ORDER_STATUS_UPDATED",
             order=_serialize_store_order(sale),
+        )
+
+
+@extend_schema(tags=["StoreOps"])
+class StoreOpsAutoShipmentView(APIView):
+    """ Genera una guia automatica (MiPaquete) para una orden. """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, sale_id: int):
+        if not request.user.has_perm("inventory.change_sale"):
+            return error_response(
+                detail="No tienes permisos para generar guias",
+                code="PERMISSION_DENIED",
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        sale = Sale.objects.select_for_update().filter(id=sale_id, is_order=True).first()
+        if not sale:
+            return error_response(
+                detail="Orden no encontrada",
+                code="STORE_OPS_ORDER_NOT_FOUND",
+                http_status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if sale.status == "canceled":
+            return error_response(
+                detail="No se puede crear guia para una orden cancelada",
+                code="STORE_OPS_SHIPMENT_CANCELED_ORDER",
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
+        existing = sale.shipments.exclude(status=Shipment.ShipmentStatus.CANCELED).first()
+        if existing:
+            return error_response(
+                detail=f"Ya existe una guia activa para esta orden ({existing.tracking_number})",
+                code="STORE_OPS_SHIPMENT_EXISTS",
+                http_status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            shipment = create_shipment_for_sale(sale, source=request.user.username)
+        except ShippingProviderError as exc:
+            return error_response(
+                detail=f"Error del proveedor de envio: {exc}",
+                code="STORE_OPS_SHIPMENT_PROVIDER_ERROR",
+                http_status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        AuditLog.objects.create(
+            action="store_ops_auto_shipment_triggered",
+            entity="shipment",
+            entity_id=shipment.id,
+            performed_by=request.user.username,
+            extra_data={
+                "tracking_number": shipment.tracking_number,
+                "carrier": shipment.carrier,
+            }
+        )
+
+        return success_response(
+            detail="Guia generada correctamente",
+            code="STORE_OPS_AUTO_SHIPMENT_OK",
+            shipment={
+                "id": shipment.id,
+                "tracking_number": shipment.tracking_number,
+                "carrier": shipment.carrier,
+                "status": shipment.status,
+            }
         )
 
 
@@ -1817,6 +1909,33 @@ class StoreOpsManualShipmentView(APIView):
             )
 
         now = timezone.now()
+        # Crear evento inicial para el historial si no hay eventos o es nuevo
+        if not ShipmentEvent.objects.filter(shipment=shipment).exists():
+             ShipmentEvent.objects.create(
+                shipment=shipment,
+                provider_event_id=f"ops_manual_init_{shipment.id}_{now.timestamp()}",
+                event_type="created",
+                payload={
+                    "status": "created",
+                    "description": "Guía de envío registrada manualmente",
+                    "source": "ops_manual"
+                },
+                occurred_at=now
+            )
+        elif shipment.status:
+             # Agregar evento de actualización si es manual
+             ShipmentEvent.objects.create(
+                shipment=shipment,
+                provider_event_id=f"ops_manual_update_{shipment.id}_{now.timestamp()}",
+                event_type=shipment.status,
+                payload={
+                    "status": shipment.status,
+                    "description": f"Información de envío actualizada: {shipment.status}",
+                    "source": "ops_manual"
+                },
+                occurred_at=now
+            )
+
         sale_fields = ["updated_at"]
         if shipment.status in {Shipment.ShipmentStatus.CREATED, Shipment.ShipmentStatus.IN_TRANSIT}:
             if sale.status in {"paid", "processing"}:

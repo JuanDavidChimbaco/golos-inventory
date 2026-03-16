@@ -20,7 +20,7 @@ from rest_framework import permissions, status
 from rest_framework.views import APIView
 
 from ..core.api_responses import error_response, success_response
-from ..models import AuditLog, Sale, Shipment
+from ..models import AuditLog, Sale, Shipment, ShipmentEvent
 
 logger = logging.getLogger(__name__)
 
@@ -447,6 +447,17 @@ class StoreDeliveryTrackingPublicView(APIView):
             base_url = getattr(settings, "STORE_FRONTEND_URL", "http://localhost:3000")
             confirmation_link = f"{base_url}/store/delivery-confirmation/{sale.id}/{confirmation_token}"
         
+        # Obtener historial de eventos
+        events = ShipmentEvent.objects.filter(shipment=shipment).order_by("-occurred_at")
+        timeline = [
+            {
+                "status": event.event_type if event.event_type else event.payload.get("status", "unknown"),
+                "date": event.occurred_at.isoformat(),
+                "description": event.payload.get("description") or event.payload.get("location") or "",
+            }
+            for event in events
+        ]
+
         return success_response(
             detail="Información de seguimiento obtenida",
             code="STORE_TRACKING_INFO_OK",
@@ -459,6 +470,7 @@ class StoreDeliveryTrackingPublicView(APIView):
                 "created_at": shipment.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                 "label_url": shipment.label_url,
             },
+            timeline=timeline,
             order={
                 "sale_id": sale.id,
                 "customer": sale.customer,

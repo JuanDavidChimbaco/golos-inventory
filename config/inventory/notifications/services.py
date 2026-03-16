@@ -2,6 +2,7 @@ import os
 import logging
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils import timezone
 import urllib.request
 import json
 
@@ -44,6 +45,45 @@ class NotificationService:
                 message=message.replace('*', ''), # Quitar negritas MD para email plano
                 recipient=manager_email
             )
+
+    @staticmethod
+    def send_login_notification(user, request):
+        """
+        Envía una alerta de inicio de sesión al usuario
+        """
+        if not getattr(settings, 'NOTIFICATIONS_ENABLED', True):
+            return
+
+        user_email = user.email
+        if not user_email:
+            return
+
+        # Capturar info del dispositivo/IP
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        
+        user_agent = request.META.get('HTTP_USER_AGENT', 'Desconocido')
+        date_str = timezone.now().strftime('%d/%m/%Y %H:%M')
+
+        subject = "🛡️ Alerta de Inicio de Sesión - Golos Store"
+        message = (
+            f"Hola {user.first_name or user.username},\n\n"
+            f"Se ha detectado un nuevo inicio de sesión en tu cuenta de Golos Store.\n\n"
+            f"📅 Fecha: {date_str}\n"
+            f"🌐 Dirección IP: {ip}\n"
+            f"💻 Dispositivo: {user_agent}\n\n"
+            f"Si fuiste tú, puedes ignorar este correo. "
+            f"Si no reconoces esta actividad, por favor cambia tu contraseña inmediatamente."
+        )
+
+        NotificationService._send_email(
+            subject=subject,
+            message=message,
+            recipient=user_email
+        )
 
     @staticmethod
     def _send_whatsapp(phone, message):
