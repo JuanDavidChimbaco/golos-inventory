@@ -606,6 +606,12 @@ def _apply_wompi_transaction_to_sale(sale: Sale, transaction_data: dict, source:
                 extra_data={"error": str(exc)},
             )
         _ensure_shipment_for_paid_order(sale, source=source)
+        
+        # --- NUEVO: Registrar entrada de dinero para ventas online ---
+        from ..core.services import SaleService
+        # Simulamos un usuario del sistema para el registro financiero online
+        system_user = type('SystemUser', (), {'username': f'system_{source}'})()
+        SaleService._register_financial_entry(sale, system_user)
 
     AuditLog.objects.create(
         action="wompi_transaction_sync",

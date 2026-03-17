@@ -9,7 +9,11 @@ from datetime import date
 from django.db.models.functions import TruncDate
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
-from ..models import MovementInventory, Sale, SaleDetail, ProductImage, AuditLog, InventorySnapshot, ProductVariant, Supplier
+from ..models import (
+    MovementInventory, Sale, SaleDetail, ProductImage, 
+    AuditLog, InventorySnapshot, ProductVariant, Supplier,
+    FinancialTransaction, CashSession, FinancialCategory
+)
 
 
 
@@ -117,6 +121,47 @@ class SaleService:
         
         return f"POS-{next_num:05d}"
 
+    @staticmethod
+    def _get_or_create_sales_category() -> FinancialCategory:
+        """Obtiene o crea la categoría financiera para ventas"""
+        category, _ = FinancialCategory.objects.get_or_create(
+            name="Venta de Productos",
+            defaults={
+                "description": "Ingresos generados por la venta de productos (POS/Online)",
+                "is_income": True,
+                "is_active": True
+            }
+        )
+        return category
+
+    @classmethod
+    def _register_financial_entry(cls, sale: Sale, user) -> FinancialTransaction:
+        """Registra el ingreso de dinero en la contabilidad"""
+        
+        # 1. Evitar duplicados (Una transacción por venta)
+        if FinancialTransaction.objects.filter(sale=sale).exists():
+            return FinancialTransaction.objects.filter(sale=sale).first()
+
+        # 2. Buscar categoría de ventas
+        category = cls._get_or_create_sales_category()
+
+        # 3. Si es efectivo (CASH), buscar si hay una caja abierta
+        session = None
+        if sale.payment_method == 'CASH':
+            session = CashSession.objects.filter(status='open').first()
+        
+        # 4. Crear la transacción
+        return FinancialTransaction.objects.create(
+            sale=sale,
+            session=session,
+            category=category,
+            amount=sale.total,
+            transaction_type='income',
+            payment_method=sale.payment_method or 'CASH',
+            description=f"Ingreso por venta {sale.document_number or f'#{sale.id}'}",
+            created_by=user.username
+        )
+
     @classmethod
     def confirm_sale(cls, sale_id: int, user, invoice_required=False) -> Sale:
         """Confirma una venta y actualiza el inventario"""
@@ -136,11 +181,21 @@ class SaleService:
             
             # Confirmar venta
             sale.status = "completed"
+            
+            # Si se confirma, asumimos que el pago se procesó (especialmente en POS)
+            if sale.payment_status != "paid":
+                sale.payment_status = "paid"
+                if not sale.paid_at:
+                    sale.paid_at = now()
+            
             sale.created_by = user.username
             sale.save()
             
-            # Crear movimientos
+            # Crear movimientos de inventario
             cls._create_sale_movements(sale, user)
+            
+            # --- NUEVO: Registrar entrada de dinero ---
+            cls._register_financial_entry(sale, user)
             
             # Registrar auditoría
             cls._log_sale_confirmation(sale, user)
