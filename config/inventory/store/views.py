@@ -404,6 +404,7 @@ def _serialize_store_order(sale: Sale) -> dict:
     """
     return {
         "sale_id": sale.id,
+        "customer_name": sale.customer,
         "status": sale.status,
         "status_detail": _status_detail(sale.status),
         "payment_status": sale.payment_status,
