@@ -14,11 +14,12 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-
+# Force reload trigger
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import HttpResponse
 from rest_framework import routers
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from drf_spectacular.views import (
@@ -63,6 +64,7 @@ from inventory.store.delivery_notifications import (
     StoreDeliveryTrackingPublicView,
 )
 from inventory import views
+from inventory.finance.views import FinancialReportViewSet
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
@@ -200,12 +202,18 @@ router.register(
     basename="financial-transactions"
 )
 router.register(
+    r"financial-report",
+    views.FinancialReportViewSet,
+    basename="financial-report"
+)
+router.register(
     r"cash-sessions", 
     views.CashSessionViewSet, 
     basename="cash-sessions"
 )
 
 urlpatterns = [
+    path("api/financial-report/", views.FinancialReportViewSet.as_view({'get': 'list'}), name="financial-report-manual"),
     path("admin/", admin.site.urls),
     # JWT Authentication
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
@@ -259,6 +267,7 @@ urlpatterns = [
         name="redoc"
     ),
 ]
+
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

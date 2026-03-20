@@ -3,12 +3,14 @@ Servicios de negocio para Golos Inventory
 """
 from django.db import transaction
 from django.core.exceptions import ValidationError
-from django.db.models import Sum, Q, F
+from datetime import date, datetime, time
+from django.utils import timezone
 from django.utils.timezone import now
-from datetime import date
 from django.db.models.functions import TruncDate
+from django.db.models import Sum, Q, F, Count
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
+from decimal import Decimal
 from ..models import (
     MovementInventory, Sale, SaleDetail, ProductImage, 
     AuditLog, InventorySnapshot, ProductVariant, Supplier,
@@ -756,3 +758,95 @@ class ImageService:
         except Exception as e:
             # No fallar si la optimización falla, solo loggear
             print(f"Error optimizando imagen: {e}")
+
+
+class FinancialReportingService:
+    """Servicio para generar reportes financieros complejos (Ganancias, Gastos, Balance)"""
+
+    @classmethod
+    def get_financial_summary(cls, start_date: date, end_date: date) -> dict:
+        """
+        Calcula el resumen financiero para un periodo dado.
+        
+        Args:
+            start_date: Fecha inicial
+            end_date: Fecha final
+            
+        Returns:
+            dict: Resumen con ingresos, costos de venta, gastos y utilidad.
+        """
+        # Convertir fechas a datetimes para filtrar correctamente
+        start_dt = timezone.make_aware(datetime.combine(start_date, time.min))
+        end_dt = timezone.make_aware(datetime.combine(end_date, time.max))
+
+        # 1. INGRESOS BRUTOS (Ventas directas y online)
+        # Sumamos el total de las ventas completadas o pagadas
+        sales_data = Sale.objects.filter(
+            status__in=['completed', 'shipped', 'delivered', 'paid'],
+            created_at__range=(start_dt, end_dt)
+        ).aggregate(
+            total_revenue=Sum('total')
+        )
+        total_revenue = sales_data['total_revenue'] or Decimal('0.00')
+
+        # 2. COSTO DE MERCANCÍA VENDIDA (COGS)
+        # Basado en el costo actual de la variante multiplicado por la cantidad vendida
+        # Nota: Es una aproximación si el costo no se guardó al momento de la venta.
+        details = SaleDetail.objects.filter(
+            sale__status__in=['completed', 'shipped', 'delivered', 'paid'],
+            sale__created_at__range=(start_dt, end_dt)
+        ).select_related('variant').all()
+        
+        cogs = sum((detail.variant.cost * detail.quantity for detail in details), start=Decimal('0.00'))
+
+        # 3. GASTOS OPERATIVOS
+        # Registros en FinancialTransaction de tipo 'expense'
+        expenses_data = FinancialTransaction.objects.filter(
+            transaction_type='expense',
+            created_at__range=(start_dt, end_dt)
+        ).aggregate(
+            total_expenses=Sum('amount')
+        )
+        total_expenses = expenses_data['total_expenses'] or Decimal('0.00')
+
+        # 4. OTROS INGRESOS (No ventas)
+        # Registros en FinancialTransaction de tipo 'income' que NO estén vinculados a una venta
+        other_income_data = FinancialTransaction.objects.filter(
+            transaction_type='income',
+            sale__isnull=True,
+            created_at__range=(start_dt, end_dt)
+        ).aggregate(
+            total_other=Sum('amount')
+        )
+        other_income = other_income_data['total_other'] or Decimal('0.00')
+
+        # 5. CÁLCULOS FINALES
+        gross_profit = total_revenue - cogs
+        net_profit = gross_profit + other_income - total_expenses
+        
+        profit_margin = (net_profit / total_revenue * 100) if total_revenue > 0 else Decimal('0.00')
+
+        # 6. DESGLOSE POR CATEGORÍA (Gastos e Ingresos extra)
+        category_breakdown = FinancialTransaction.objects.filter(
+            created_at__range=(start_dt, end_dt)
+        ).values('category__name', 'transaction_type', 'payment_method').annotate(
+            total=Sum('amount'),
+            count=Count('id')
+        ).order_by('-total')
+
+        return {
+            "period": {
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat()
+            },
+            "summary": {
+                "revenue": str(total_revenue),
+                "cogs": str(cogs),
+                "other_income": str(other_income),
+                "expenses": str(total_expenses),
+                "gross_profit": str(gross_profit),
+                "net_profit": str(net_profit),
+                "profit_margin_percent": str(round(profit_margin, 2))
+            },
+            "category_breakdown": list(category_breakdown)
+        }

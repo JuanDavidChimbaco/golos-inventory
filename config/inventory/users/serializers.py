@@ -2,8 +2,9 @@
 Serializers para gestión de usuarios y grupos
 """
 from django.contrib.auth.models import User, Group, Permission
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
-
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer básico para usuarios"""
@@ -189,3 +190,31 @@ class GroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Group
         fields = ["id", "name", "permissions", "permission_ids"]
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """Serializer para solicitar el restablecimiento de contraseña"""
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """Serializer para confirmar el restablecimiento de contraseña"""
+    uidb64 = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate(self, attrs):
+        uidb64 = attrs.get('uidb64')
+        token = attrs.get('token')
+
+        try:
+            uid = urlsafe_base64_decode(uidb64).decode()
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            raise serializers.ValidationError("El enlace de restablecimiento es inválido o ha expirado.")
+
+        if not default_token_generator.check_token(user, token):
+            raise serializers.ValidationError("El token de restablecimiento es inválido o ha expirado.")
+
+        attrs['user'] = user
+        return attrs

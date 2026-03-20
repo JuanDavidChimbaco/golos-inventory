@@ -11,8 +11,15 @@ from .serializers import (
     UserManagementSerializer,
     UserMeSerializer,
     UserMePasswordSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetConfirmSerializer,
     GroupSerializer,
 )
+from django.core.mail import send_mail
+from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes
 from drf_spectacular.utils import extend_schema
 
 @extend_schema(tags=['Users'])
@@ -55,6 +62,51 @@ class UserViewSet(viewsets.ModelViewSet):
         request.user.set_password(serializer.validated_data["new_password"])
         request.user.save()
         return Response({"detail": "Contraseña actualizada correctamente."}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='request-password-reset', permission_classes=[permissions.AllowAny])
+    def request_password_reset(self, request):
+        """Endpoint para solicitar restablecimiento de contraseña"""
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+        
+        users = User.objects.filter(email=email, is_active=True)
+        if users.exists():
+            for user in users:
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                reset_url = f"http://localhost:5173/store/reset-password?uid={uid}&token={token}"
+                
+                subject = "Restablece tu contraseña - Golos Store"
+                message = f"Hola {user.first_name or user.username},\n\n"\
+                          f"Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace para continuar:\n\n"\
+                          f"{reset_url}\n\n"\
+                          f"Si no solicitaste esto, ignora este correo.\n"
+                
+                send_mail(
+                    subject,
+                    message,
+                    settings.EMAIL_HOST_USER or "noreply@golos.com",
+                    [user.email],
+                    fail_silently=False,
+                )
+        
+        # Siempre retornamos un mensaje genérico por seguridad (evita enuumeración de usuarios)
+        return Response({"detail": "Si el correo electrónico existe en nuestro sistema, se enviará un enlace de restablecimiento."}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='confirm-password-reset', permission_classes=[permissions.AllowAny])
+    def confirm_password_reset(self, request):
+        """Endpoint para confirmar el restablecimiento de contraseña"""
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        user = serializer.validated_data['user']
+        new_password = serializer.validated_data['new_password']
+        
+        user.set_password(new_password)
+        user.save()
+        
+        return Response({"detail": "Contraseña restablecida correctamente."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=['Groups'])

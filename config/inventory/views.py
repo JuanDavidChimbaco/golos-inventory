@@ -21,6 +21,7 @@ from .notifications.views import NotificationViewSet
 from .finance.views import (
     FinancialCategoryViewSet,
     FinancialTransactionViewSet,
+    FinancialReportViewSet,
     CashSessionViewSet
 )
 
@@ -59,5 +60,6 @@ __all__ = [
     # Finance
     "FinancialCategoryViewSet",
     "FinancialTransactionViewSet",
+    "FinancialReportViewSet",
     "CashSessionViewSet",
 ]

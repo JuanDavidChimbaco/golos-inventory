@@ -1,9 +1,12 @@
-from rest_framework import viewsets, status, filters
+print("--- LOADING FINANCE VIEWS ---")
+from rest_framework import viewsets, status, filters, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
 from django.db.models import Sum, Q
+from datetime import date
 from ..models import FinancialCategory, CashSession, FinancialTransaction
+from ..core.services import FinancialReportingService
 from .serializers import (
     FinancialCategorySerializer, 
     CashSessionSerializer, 
@@ -25,6 +28,35 @@ class FinancialTransactionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user.username)
+
+class FinancialReportViewSet(viewsets.ViewSet):
+    """ViewSet para reportes financieros complejos"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request):
+        """Genera un reporte financiero detallado para un rango de fechas"""
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+
+        try:
+            if start_date_str:
+                start_date = date.fromisoformat(start_date_str)
+            else:
+                today = date.today()
+                start_date = today.replace(day=1)
+            
+            if end_date_str:
+                end_date = date.fromisoformat(end_date_str)
+            else:
+                end_date = date.today()
+        except ValueError:
+            return Response(
+                {"detail": "Formato de fecha inválido. Use AAAA-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        report_data = FinancialReportingService.get_financial_summary(start_date, end_date)
+        return Response(report_data)
 
 class CashSessionViewSet(viewsets.ModelViewSet):
     queryset = CashSession.objects.all()
