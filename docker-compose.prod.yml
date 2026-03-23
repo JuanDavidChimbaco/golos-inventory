@@ -1,0 +1,40 @@
+name: golos-production
+
+services:
+  # 1. Contenedor de Redis (esencial para WebSockets en producción)
+  redis:
+    image: redis:7-alpine
+    container_name: golos-redis
+    restart: unless-stopped
+    networks:
+      - red_ingenieria
+
+  # 2. Tu aplicación Django (ahora con Daphne)
+  app:
+    image: toothiertrain13/golos-app:latest
+    container_name: golos-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    networks:
+      - red_ingenieria
+    depends_on:
+      - redis
+    # EXTRA_HOSTS es la magia: conecta 'database' con la base de datos de tu máquina virtual
+    # y 'redis-server' con el contenedor redis por si usas ese nombre en tu .env
+    extra_hosts:
+      - "database:host-gateway"
+    # Este comando arranca Daphne en vez de Gunicorn para soportar HTTP + WebSockets
+    command:
+      - daphne
+      - -b
+      - 0.0.0.0
+      - -p
+      - "8000"
+      - config.asgi:application
+
+networks:
+  red_ingenieria:
+    external: true

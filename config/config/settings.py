@@ -26,6 +26,8 @@ ALLOWED_HOSTS = []  # cada entorno lo sobreescribe
 
 # ─── Aplicaciones ────────────────────────────────────────────────────────────
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -74,6 +76,24 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
+
+# ─── Channels (WebSockets) ───────────────────────────────────────────────────
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [(os.getenv('REDIS_HOST', '127.0.0.1'), int(os.getenv('REDIS_PORT', 6379)))],
+        },
+    },
+}
+# Fallback to InMemoryChannelLayer in local dev if Redis is explicitly disabled
+if os.getenv('USE_IN_MEMORY_CHANNEL_LAYER', 'False').lower() == 'true':
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
 
 # ─── Contraseñas ─────────────────────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = [
