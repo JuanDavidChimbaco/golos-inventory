@@ -28,3 +28,10 @@ class StockConsumer(AsyncWebsocketConsumer):
             "variant_id": event["variant_id"],
             "new_stock": event["new_stock"]
         }))
+
+    async def system_alert(self, event):
+        # Evento genérico para notificaciones del sistema
+        await self.send(text_data=json.dumps({
+            "type": "system_alert",
+            "message": event.get("message", "Nueva alerta")
+        }))

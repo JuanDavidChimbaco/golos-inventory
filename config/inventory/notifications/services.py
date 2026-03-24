@@ -8,20 +8,26 @@ import json
 
 logger = logging.getLogger(__name__)
 
+from django.contrib.auth import get_user_model
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+from ..models import SystemNotification
+import urllib.parse
+
 class NotificationService:
     @staticmethod
     def send_new_sale_alert(sale):
         """
-        Envía alertas de nueva venta por Email y WhatsApp
+        Envía alertas de nueva venta por Email y WhatsApp,
+        y crea las notificaciones del sistema de la gestión.
         """
         if not getattr(settings, 'NOTIFICATIONS_ENABLED', True):
             return
 
-        manager_phone = getattr(settings, 'NOTIFICATIONS_MANAGER_PHONE', '')
         manager_email = getattr(settings, 'NOTIFICATIONS_MANAGER_EMAIL', '')
         
         # 1. Preparar el mensaje
-        customer_name = sale.customer_name if hasattr(sale, 'customer_name') else 'Cliente'
+        customer_name = getattr(sale, 'customer', 'Cliente')
         total = f"${sale.total:,.0f}"
         items_count = sale.details.count()
         
@@ -30,19 +36,40 @@ class NotificationService:
             f"👤 *Cliente:* {customer_name}\n"
             f"💰 *Total:* {total}\n"
             f"📦 *Productos:* {items_count}\n"
-            f"📅 *Fecha:* {sale.created_at.strftime('%d/%m/%Y %H:%M')}\n\n"
-            f"Ver detalles en el panel: {getattr(settings, 'STORE_FRONTEND_URL', '')}/sales"
+            f"📅 *Fecha:* {sale.created_at.strftime('%d/%m/%Y %H:%M')}"
         )
 
-        # 2. Enviar por WhatsApp (Placeholder logic/Whapi/Twilio)
-        if manager_phone:
-            NotificationService._send_whatsapp(manager_phone, message)
+        # 2. Crear Alertas para los Administradores (Campanita DB)
+        User = get_user_model()
+        admins = User.objects.filter(is_staff=True)
+        for admin in admins:
+            SystemNotification.objects.create(
+                user=admin,
+                title="Nueva Venta en Tienda",
+                message=f"{customer_name} compró {items_count} producto(s) por {total}.",
+                type="sale",
+                related_link="/sales"
+            )
+
+        # 3. Notificar al Frontend por WebSocket (para que aparezca el punto rojo instantáneamente)
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                'stock_updates', # Interceptamos el mismo websocket para ahorrar conexiones
+                {
+                    'type': 'system_alert',
+                    'message': 'Nueva Venta'
+                }
+            )
+
+        # 4. Enviar Alerta por Telegram (Grupo oficial de la tienda)
+        NotificationService._send_telegram(message)
             
-        # 3. Enviar por Email
+        # 5. Enviar por Email (si está configurado)
         if manager_email:
             NotificationService._send_email(
                 subject=f"Nueva Venta registrada: {total}",
-                message=message.replace('*', ''), # Quitar negritas MD para email plano
+                message=message.replace('*', ''), 
                 recipient=manager_email
             )
 
@@ -86,36 +113,29 @@ class NotificationService:
         )
 
     @staticmethod
-    def _send_whatsapp(phone, message):
+    def _send_telegram(message):
         """
-        Envía mensaje por WhatsApp usando integración externa (ej: Whapi)
+        Envía mensaje a un Chat o Grupo de Telegram
         """
-        api_url = getattr(settings, 'NOTIFICATIONS_WHATSAPP_URL', '')
-        api_token = getattr(settings, 'NOTIFICATIONS_WHATSAPP_TOKEN', '')
+        bot_token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
+        chat_id = getattr(settings, 'TELEGRAM_CHAT_ID', '')
         
-        if not api_url or not api_token:
-            logger.info(f"[NOTIF] WhatsApp (Simulado) a {phone}: {message}")
+        if not bot_token or not chat_id:
+            logger.warning("No hay TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID configurado en el .env")
             return
 
         try:
-            data = json.dumps({
-                "to": phone,
-                "body": message
-            }).encode('utf-8')
+            encoded_message = urllib.parse.quote(message)
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={encoded_message}&parse_mode=Markdown"
             
-            req = urllib.request.Request(
-                api_url, 
-                data=data, 
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {api_token}'
-                }
-            )
-            
-            with urllib.request.urlopen(req) as f:
-                logger.info(f"WhatsApp enviado exitosamente a {phone}")
+            req = urllib.request.Request(url, method='GET')
+            with urllib.request.urlopen(req) as response:
+                if response.getcode() == 200:
+                    logger.info("Alerta de venta enviada exitosamente por Telegram.")
+                else:
+                    logger.error(f"Fallo enviando alerta de Telegram: {response.getcode()}")
         except Exception as e:
-            logger.error(f"Error enviando WhatsApp: {str(e)}")
+            logger.error(f"Error enviando notificación vía Telegram: {str(e)}")
 
     @staticmethod
     def _send_email(subject, message, recipient):

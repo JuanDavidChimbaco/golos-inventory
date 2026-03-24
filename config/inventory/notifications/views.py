@@ -25,6 +25,43 @@ class NotificationViewSet(viewsets.GenericViewSet):
     
     @extend_schema(tags=['Notifications'])
     @action(detail=False, methods=['get'])
+    def user_alerts(self, request):
+        """Notificaciones para el usuario actual (campanita)"""
+        from ..models import SystemNotification
+        alerts = SystemNotification.objects.filter(user=request.user).order_by('-created_at')[:20]
+        data = [{
+            'id': a.id,
+            'title': a.title,
+            'message': a.message,
+            'is_read': a.is_read,
+            'type': a.type,
+            'related_link': a.related_link,
+            'created_at': a.created_at.strftime('%Y-%m-%d %H:%M')
+        } for a in alerts]
+        unread_count = sum(1 for a in data if not a['is_read'])
+        
+        return success_response(
+            detail='Alertas de usuario obtenidas',
+            code='NOTIFICATIONS_ALERTS_OK',
+            alerts=data,
+            summary={'unread_count': unread_count}
+        )
+
+    @extend_schema(tags=['Notifications'])
+    @action(detail=True, methods=['post'], url_path='mark_read')
+    def mark_read(self, request, pk=None):
+        """Marcar una notificación como leída"""
+        from ..models import SystemNotification
+        try:
+            alert = SystemNotification.objects.get(pk=pk, user=request.user)
+            alert.is_read = True
+            alert.save()
+            return success_response(detail='Marcada como leída', code='NOTIFICATION_READ_OK')
+        except SystemNotification.DoesNotExist:
+            return success_response(detail='No encontrada', code='NOT_FOUND')
+
+    @extend_schema(tags=['Notifications'])
+    @action(detail=False, methods=['get'])
     def low_stock_alerts(self, request):
         """Alertas de stock bajo"""
         threshold = request.query_params.get('threshold', None)

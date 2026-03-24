@@ -1,4 +1,4 @@
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
 from django.db.models import Sum
 from ..models import SaleDetail, Sale, MovementInventory
@@ -23,12 +23,36 @@ def update_sale_total_on_delete(sender, instance, **kwargs):
     sale.total = total_sum
     sale.save(update_fields=['total'])
 
+@receiver(pre_save, sender=Sale)
+def capture_old_status(sender, instance, **kwargs):
+    """Captura el estado anterior de la venta para detectar cambios"""
+    if instance.pk:
+        try:
+            old_instance = Sale.objects.get(pk=instance.pk)
+            instance._old_status = old_instance.status
+        except Sale.DoesNotExist:
+            instance._old_status = None
+    else:
+        instance._old_status = None
+
 @receiver(post_save, sender=Sale)
 def notify_manager_on_new_sale(sender, instance, created, **kwargs):
     """
-    Envía una notificación al administrador cuando se crea una nueva venta
+    Envía una notificación al administrador cuando se confirma una venta
     """
-    if created:
+    old_status = getattr(instance, '_old_status', None)
+    
+    # Consideramos "confirmada" si el status pasa a paid, processing o completed
+    is_confirmed_now = instance.status in ['paid', 'processing', 'completed']
+    was_confirmed_before = old_status in ['paid', 'processing', 'completed']
+
+    should_notify = False
+    if created and is_confirmed_now:
+        should_notify = True
+    elif not created and is_confirmed_now and not was_confirmed_before:
+        should_notify = True
+
+    if should_notify:
         try:
             NotificationService.send_new_sale_alert(instance)
         except Exception:
