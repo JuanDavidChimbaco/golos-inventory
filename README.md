@@ -4,9 +4,12 @@ Sistema de inventario, ventas y tienda online (Django + DRF) con permisos por gr
 
 ## Estado Actual
 - **Backend**: API REST con JWT y arquitectura modular
-- **Tienda Pública** (`/api/store/*`): catálogo, carrito, checkout y pagos Wompi
+- **Tienda Pública** (`/api/store/*`): catálogo, carrito, checkout, recuperación de contraseña y pagos Wompi
 - **Operaciones StoreOps**: gestión de pedidos, estados y guías
 - **Inventario**: control automático de stock conectado al flujo de ventas
+- **Notificaciones en Tiempo Real**: Eventos en vivo hacia el dashboard vía WebSockets (Daphne/Redis)
+- **Alertas Bot**: Integración con Telegram Bot para notificaciones instantáneas de nuevas ventas
+- **Reportes**: Generación y consulta de reportes financieros del negocio
 
 ## Requisitos
 - Python 3.11+

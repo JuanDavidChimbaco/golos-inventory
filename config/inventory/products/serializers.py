@@ -63,15 +63,30 @@ class ProductVariantSerializer(serializers.ModelSerializer):
     """Serializer para variantas de productos"""
     stock = serializers.IntegerField(read_only=True)
     product_name = serializers.CharField(source='product.name', read_only=True)
+    product_brand = serializers.CharField(source='product.brand', read_only=True)
+    image_url = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = ProductVariant
         fields = [
-            'id', 'product', 'product_name', 'gender', 'color', 'size', 
+            'id', 'product', 'product_name', 'product_brand', 'image_url',
+            'gender', 'color', 'size', 
             'price', 'cost', 'stock_minimum', 'stock', 'active', 
             'created_at', 'updated_at', 'is_deleted'
         ]
         read_only_fields = ["created_by", "updated_by"]
+
+    def get_image_url(self, obj):
+        """Obtener URL de imagen principal del producto padre."""
+        try:
+            img = obj.product.images.filter(is_primary=True, variant__isnull=True).first()
+            if not img:
+                img = obj.product.images.first()
+            if img and img.image:
+                return img.image.url
+        except Exception:
+            pass
+        return None
 
 
 class ProductReadSerializer(serializers.ModelSerializer):

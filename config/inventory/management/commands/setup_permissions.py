@@ -36,11 +36,24 @@ class Command(BaseCommand):
                     'inventory.view_product',
                     'inventory.add_product',
                     'inventory.change_product',
+                    'inventory.delete_product',
+                    'inventory.view_productvariant',
+                    'inventory.add_productvariant',
+                    'inventory.change_productvariant',
+                    'inventory.delete_productvariant',
+                    'inventory.view_productimage',
+                    'inventory.add_productimage',
+                    'inventory.change_productimage',
+                    'inventory.delete_productimage',
+                    'inventory.view_supplier',
+                    'inventory.add_supplier',
+                    'inventory.change_supplier',
                     'inventory.view_movementinventory',
                     'inventory.add_movementinventory',
                     'inventory.change_movementinventory',
                     # Permisos personalizados
                     'inventory.manage_inventory',
+                    'inventory.manage_suppliers',
                 ]
             },
             'Customers': {
@@ -65,11 +78,25 @@ class Command(BaseCommand):
             'Managers': {
                 'description': 'Administradores del sistema',
                 'permissions': [
-                    # Todos los permisos de productos
+                    # Todos los permisos de productos, variantes e imágenes
                     'inventory.view_product',
                     'inventory.add_product',
                     'inventory.change_product',
                     'inventory.delete_product',
+                    'inventory.view_productvariant',
+                    'inventory.add_productvariant',
+                    'inventory.change_productvariant',
+                    'inventory.delete_productvariant',
+                    'inventory.view_productimage',
+                    'inventory.add_productimage',
+                    'inventory.change_productimage',
+                    'inventory.delete_productimage',
+                    # Proveedores
+                    'inventory.view_supplier',
+                    'inventory.add_supplier',
+                    'inventory.change_supplier',
+                    'inventory.delete_supplier',
+                    'inventory.manage_suppliers',
                     # Todos los permisos de ventas
                     'inventory.view_sale',
                     'inventory.add_sale',
@@ -82,6 +109,19 @@ class Command(BaseCommand):
                     'inventory.change_movementinventory',
                     'inventory.delete_movementinventory',
                     'inventory.manage_inventory',
+                    # Permisos financieros y reportes
+                    'inventory.view_financialcategory',
+                    'inventory.add_financialcategory',
+                    'inventory.change_financialcategory',
+                    'inventory.delete_financialcategory',
+                    'inventory.view_cashsession',
+                    'inventory.add_cashsession',
+                    'inventory.change_cashsession',
+                    'inventory.delete_cashsession',
+                    'inventory.view_financialtransaction',
+                    'inventory.add_financialtransaction',
+                    'inventory.change_financialtransaction',
+                    'inventory.delete_financialtransaction',
                     # Permisos de gestión de usuarios y grupos
                     'auth.view_user',
                     'auth.add_user',
