@@ -6,7 +6,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
-from django.db.models import F, Exists, OuterRef
+from django.db.models import F, Exists, OuterRef, ProtectedError
 from ..models import Product, ProductVariant, ProductImage
 from ..core.services import ImageService
 from .serializers import (
@@ -44,6 +44,18 @@ class ProductViewSet(viewsets.ModelViewSet):
         if self.action in ['list', 'retrieve']:
             return ProductReadSerializer
         return ProductSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Eliminar el producto. Captura error si hay dependencias protegidas.
+        """
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "No se puede eliminar este producto porque tiene variantes o imágenes asociadas. Te sugerimos cambiar su estado a inactivo."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 @extend_schema(tags=['ProductsVariants'])
